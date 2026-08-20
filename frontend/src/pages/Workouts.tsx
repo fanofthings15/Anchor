@@ -16,6 +16,7 @@ import {
   type Meal,
   type SavedFood,
   type UserSettings,
+  type WeightEntry,
   type Workout,
   type WorkoutExercise,
   type WorkoutRoutine,
@@ -23,7 +24,7 @@ import {
 } from "../api/client";
 import { buildMonthGrid, sameDay } from "../calendarUtils";
 
-type Tab = "workouts" | "food";
+type Tab = "workouts" | "food" | "weight";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // Local calendar date, not UTC — must match how workoutIdsByDay/computeStreaks below
@@ -104,8 +105,11 @@ export default function Workouts() {
         <button type="button" className={`tab ${tab === "food" ? "active" : ""}`} onClick={() => setTab("food")}>
           Food
         </button>
+        <button type="button" className={`tab ${tab === "weight" ? "active" : ""}`} onClick={() => setTab("weight")}>
+          Weight
+        </button>
       </div>
-      {tab === "workouts" ? <WorkoutsTab /> : <FoodTab />}
+      {tab === "workouts" ? <WorkoutsTab /> : tab === "food" ? <FoodTab /> : <WeightTab />}
     </div>
   );
 }
@@ -1024,6 +1028,140 @@ function FoodTab() {
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function WeightTab() {
+  const [entries, setEntries] = useState<WeightEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [date, setDate] = useState(() => todayISO());
+  const [weight, setWeight] = useState("");
+  const [notes, setNotes] = useState("");
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      setEntries(await api.listWeightEntries());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function quickAdd(e: React.FormEvent) {
+    e.preventDefault();
+    const lbs = Number(weight);
+    if (!date || !weight || !Number.isFinite(lbs) || lbs <= 0) return;
+    const entry = await api.createWeightEntry({ entry_date: date, weight_lbs: lbs, notes: notes.trim() || undefined });
+    setEntries((prev) => [...prev, entry].sort((a, b) => a.entry_date.localeCompare(b.entry_date)));
+    setWeight("");
+    setNotes("");
+  }
+
+  async function remove(id: string) {
+    await api.deleteWeightEntry(id);
+    setEntries((prev) => prev.filter((e) => e.id !== id));
+  }
+
+  const chartData = useMemo(() => entries.map((e) => ({ date: e.entry_date, weight: e.weight_lbs })), [entries]);
+
+  const latest = entries.length > 0 ? entries[entries.length - 1] : null;
+  const previous = entries.length > 1 ? entries[entries.length - 2] : null;
+  const delta = latest && previous ? round1(latest.weight_lbs - previous.weight_lbs) : null;
+
+  const sortedForList = useMemo(() => [...entries].sort((a, b) => b.entry_date.localeCompare(a.entry_date)), [entries]);
+
+  return (
+    <div>
+      <form className="quick-add" onSubmit={quickAdd} style={{ flexWrap: "wrap" }}>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        <input
+          type="number"
+          step="0.1"
+          placeholder="Weight (lb)"
+          value={weight}
+          onChange={(e) => setWeight(e.target.value)}
+          style={{ width: 110 }}
+          required
+        />
+        <input
+          type="text"
+          placeholder="Notes (optional)"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          style={{ flex: "1 1 140px" }}
+        />
+        <button className="btn btn-primary" type="submit">
+          Log weight
+        </button>
+      </form>
+
+      {latest && (
+        <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+          <span className="chip chip-accent">Latest: {latest.weight_lbs} lb</span>
+          {delta != null && (
+            <span className={`chip ${delta > 0 ? "chip-warning" : delta < 0 ? "" : ""}`}>
+              {delta > 0 ? "▲" : delta < 0 ? "▼" : "–"} {Math.abs(delta)} lb since last entry
+            </span>
+          )}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="empty-state">Loading…</div>
+      ) : entries.length === 0 ? (
+        <div className="empty-state">No weight logged yet — add your first entry above.</div>
+      ) : (
+        <>
+          <div className="chart-container">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="date" stroke="var(--border)" tick={axisTick} tickFormatter={shortDate} />
+                <YAxis
+                  stroke="var(--border)"
+                  tick={axisTick}
+                  width={40}
+                  domain={[(min: number) => Math.floor(min - 3), (max: number) => Math.ceil(max + 3)]}
+                />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={shortDate} formatter={(v: number) => [`${v} lb`, "Weight"]} />
+                <Line
+                  type="monotone"
+                  dataKey="weight"
+                  name="Weight"
+                  stroke="var(--accent)"
+                  strokeWidth={2}
+                  dot={{ r: 4, fill: "var(--accent)", stroke: "var(--bg-card)", strokeWidth: 2 }}
+                  activeDot={{ r: 5, fill: "var(--accent)", stroke: "var(--bg-card)", strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="list">
+            {sortedForList.map((e) => (
+              <div className="card" key={e.id}>
+                <div className="row-between">
+                  <div>
+                    <strong>{e.weight_lbs} lb</strong>
+                    <span className="chip" style={{ marginLeft: 8 }}>
+                      {e.entry_date}
+                    </span>
+                    {e.notes && <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>{e.notes}</div>}
+                  </div>
+                  <button type="button" className="btn-icon text-danger" onClick={() => remove(e.id)} aria-label="Delete entry">
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

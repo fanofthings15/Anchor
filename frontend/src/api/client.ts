@@ -172,6 +172,14 @@ export interface Meal {
   created_at: string;
 }
 
+export interface WeightEntry {
+  id: string;
+  entry_date: string;
+  weight_lbs: number;
+  notes: string;
+  created_at: string;
+}
+
 export interface SavedFood {
   id: string;
   name: string;
@@ -362,6 +370,12 @@ export const api = {
   createSavedFood: (data: { name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }) =>
     request<SavedFood>("/meals/saved", { method: "POST", body: JSON.stringify(data) }),
   deleteSavedFood: (id: string) => request<{ ok: true }>(`/meals/saved/${id}`, { method: "DELETE" }),
+
+  // Weight tracker
+  listWeightEntries: () => request<WeightEntry[]>("/weight"),
+  createWeightEntry: (data: { entry_date: string; weight_lbs: number; notes?: string }) =>
+    request<WeightEntry>("/weight", { method: "POST", body: JSON.stringify(data) }),
+  deleteWeightEntry: (id: string) => request<{ ok: true }>(`/weight/${id}`, { method: "DELETE" }),
 
   // Settings
   getSettings: () => request<UserSettings>("/settings"),

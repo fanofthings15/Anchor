@@ -237,6 +237,17 @@ CREATE TABLE IF NOT EXISTS workout_routine_exercises (
 );
 CREATE INDEX IF NOT EXISTS idx_workout_routine_exercises_user ON workout_routine_exercises(user_id);
 CREATE INDEX IF NOT EXISTS idx_workout_routine_exercises_routine ON workout_routine_exercises(routine_id);
+
+CREATE TABLE IF NOT EXISTS weight_entries (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  entry_date TEXT NOT NULL,
+  weight_lbs REAL NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_weight_entries_user ON weight_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_weight_entries_date ON weight_entries(entry_date);
 `);
 
   // sort_order was added to `todos` after the initial schema (drag-to-reorder within a
