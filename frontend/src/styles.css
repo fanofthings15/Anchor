@@ -385,6 +385,12 @@ button {
   cursor: grabbing;
 }
 
+.list-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius);
+}
+
 .checkbox-btn {
   min-width: 28px;
   min-height: 28px;

@@ -14,7 +14,7 @@ export default function Notes() {
   async function load() {
     setLoading(true);
     try {
-      setNotes(await api.listNotes());
+      setNotes((await api.listNotes()).sort(sortNotes));
     } finally {
       setLoading(false);
     }
@@ -26,7 +26,9 @@ export default function Notes() {
     if (!title) return;
     setQuickTitle("");
     const note = await api.createNote({ title });
-    setNotes((prev) => [note, ...prev]);
+    // A plain prepend would bury an existing pinned note under the new one — always
+    // re-sort after any mutation rather than assuming "newest" also means "top".
+    setNotes((prev) => [note, ...prev].sort(sortNotes));
   }
 
   async function togglePin(note: Note) {
@@ -36,7 +38,7 @@ export default function Notes() {
 
   async function saveBody(note: Note, body: string) {
     const updated = await api.updateNote(note.id, { body });
-    setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)));
+    setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)).sort(sortNotes));
   }
 
   async function remove(id: string) {
