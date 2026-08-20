@@ -542,6 +542,28 @@ button {
   color: var(--warning);
 }
 
+.workout-cal-cell {
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.workout-cal-cell.has-workout {
+  background: var(--success);
+  border-color: var(--success);
+  color: #06120a;
+}
+
+.workout-cal-cell.has-workout.is-today {
+  border-color: var(--text);
+}
+
+.workout-cal-cell:disabled {
+  cursor: default;
+}
+
 .calendar-more {
   font-size: 10px;
   color: var(--text-faint);
