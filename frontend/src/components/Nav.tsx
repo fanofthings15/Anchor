@@ -9,12 +9,12 @@ const PRIMARY = [
 ];
 
 const MORE = [
-  { to: "/cleaning", label: "Cleaning & Maintenance" },
-  { to: "/shopping", label: "Shopping" },
-  { to: "/bills", label: "Bills" },
-  { to: "/investments", label: "Investments" },
-  { to: "/workouts", label: "Workouts & Food" },
-  { to: "/settings", label: "Settings" },
+  { to: "/cleaning", label: "Cleaning & Maintenance", icon: "🧹" },
+  { to: "/shopping", label: "Shopping", icon: "🛒" },
+  { to: "/bills", label: "Bills", icon: "🧾" },
+  { to: "/investments", label: "Investments", icon: "📈" },
+  { to: "/workouts", label: "Workouts & Food", icon: "💪" },
+  { to: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 // One responsive component, not two separate implementations: CSS handles whether this
@@ -77,6 +77,9 @@ export default function Nav() {
           ))}
           {MORE.map((item) => (
             <NavLink key={item.to} to={item.to} className="app-nav-link app-nav-link-desktop-only">
+              <span className="app-nav-icon" aria-hidden="true">
+                {item.icon}
+              </span>
               <span className="app-nav-label">{item.label}</span>
             </NavLink>
           ))}
@@ -112,7 +115,8 @@ export default function Nav() {
             </div>
             {MORE.map((item) => (
               <NavLink key={item.to} to={item.to} className="more-sheet-link" onClick={closeSheet}>
-                {item.label}
+                <span aria-hidden="true">{item.icon}</span>
+                <span>{item.label}</span>
               </NavLink>
             ))}
           </div>
