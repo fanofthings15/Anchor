@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import {
   api,
+  type ExerciseType,
   type Meal,
   type SavedFood,
   type UserSettings,
@@ -26,8 +27,12 @@ import {
 } from "../api/client";
 import { addDaysISO, buildMonthGrid, computeStreaks, sameDay, todayISO } from "../calendarUtils";
 
-type Tab = "workouts" | "food" | "weight";
+type Tab = "workouts" | "food" | "weight" | "stats";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const EXERCISE_NAME_LIST_ID = "exercise-name-list";
+// Names that default to the cardio (distance/time) set type when typed into an exercise
+// name field — same set the backend's legacy-data migration reclassifies.
+const CARDIO_EXERCISE_NAMES = new Set(["treadmill", "walking"]);
 
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -49,7 +54,7 @@ const tooltipStyle = {
 const axisTick = { fill: "var(--text-dim)", fontSize: 11 };
 
 function isTab(value: string | null): value is Tab {
-  return value === "workouts" || value === "food" || value === "weight";
+  return value === "workouts" || value === "food" || value === "weight" || value === "stats";
 }
 
 export default function Workouts() {
@@ -78,8 +83,19 @@ export default function Workouts() {
         <button type="button" className={`tab ${tab === "weight" ? "active" : ""}`} onClick={() => selectTab("weight")}>
           Weight
         </button>
+        <button type="button" className={`tab ${tab === "stats" ? "active" : ""}`} onClick={() => selectTab("stats")}>
+          Stats
+        </button>
       </div>
-      {tab === "workouts" ? <WorkoutsTab /> : tab === "food" ? <FoodTab /> : <WeightTab />}
+      {tab === "workouts" ? (
+        <WorkoutsTab />
+      ) : tab === "food" ? (
+        <FoodTab />
+      ) : tab === "weight" ? (
+        <WeightTab />
+      ) : (
+        <StatsTab />
+      )}
     </div>
   );
 }
@@ -176,7 +192,6 @@ function WorkoutsTab() {
   const [quickDate, setQuickDate] = useState(() => todayISO());
   const [quickName, setQuickName] = useState("");
   const [startRoutineId, setStartRoutineId] = useState("");
-  const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
   const [showRoutines, setShowRoutines] = useState(false);
   const [newRoutineName, setNewRoutineName] = useState("");
 
@@ -282,15 +297,20 @@ function WorkoutsTab() {
   // Adding an exercise also seeds it with one set, pre-filled from the last time this
   // exercise was logged (if ever) — an empty exercise with no sets to fill in isn't a
   // useful starting point, and this is what Hevy actually does too.
-  async function addExercise(workoutId: string, name: string) {
-    const exercise = await api.createWorkoutExercise(workoutId, { name });
+  async function addExercise(workoutId: string, name: string, exerciseType: ExerciseType) {
+    const exercise = await api.createWorkoutExercise(workoutId, { name, exercise_type: exerciseType });
     setExercises((prev) => [...prev, exercise]);
     const previous = getPreviousSets(name, workoutId)[0];
-    const set = await api.createWorkoutSet(exercise.id, {
-      weight: previous?.weight ?? undefined,
-      reps: previous?.reps ?? undefined,
-      completed: false,
-    });
+    const set = await api.createWorkoutSet(
+      exercise.id,
+      exerciseType === "cardio"
+        ? {
+            distance_miles: previous?.distance_miles ?? undefined,
+            duration_seconds: previous?.duration_seconds ?? undefined,
+            completed: false,
+          }
+        : { weight: previous?.weight ?? undefined, reps: previous?.reps ?? undefined, completed: false }
+    );
     setSets((prev) => [...prev, set]);
   }
 
@@ -300,12 +320,24 @@ function WorkoutsTab() {
     setSets((prev) => prev.filter((s) => s.exercise_id !== id));
   }
 
-  async function addSet(exerciseId: string, weight: number | null, reps: number | null) {
-    const set = await api.createWorkoutSet(exerciseId, { weight: weight ?? undefined, reps: reps ?? undefined, completed: false });
+  async function addSet(
+    exerciseId: string,
+    data: { weight?: number | null; reps?: number | null; distance_miles?: number | null; duration_seconds?: number | null }
+  ) {
+    const set = await api.createWorkoutSet(exerciseId, { ...data, completed: false });
     setSets((prev) => [...prev, set]);
   }
 
-  async function updateSet(id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) {
+  async function updateSet(
+    id: string,
+    data: Partial<{
+      weight: number | null;
+      reps: number | null;
+      distance_miles: number | null;
+      duration_seconds: number | null;
+      completed: boolean;
+    }>
+  ) {
     setSets((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
     try {
       await api.updateWorkoutSet(id, data);
@@ -380,25 +412,6 @@ function WorkoutsTab() {
     return Array.from(names.values()).sort((a, b) => a.localeCompare(b));
   }, [exercises]);
 
-  // Plots the heaviest set logged for this exercise on each date it appears — a per-set
-  // model has no single "the" weight for a given day, so the top set is the meaningful
-  // number for a progress trend (same heuristic used everywhere else this app collapses
-  // multiple sets into one representative value).
-  const progressData = useMemo(() => {
-    if (!selectedExerciseName) return [];
-    const key = selectedExerciseName.toLowerCase();
-    const points: { date: string; weight: number }[] = [];
-    for (const ex of exercises) {
-      if (ex.name.trim().toLowerCase() !== key) continue;
-      const date = workoutDateById.get(ex.workout_id);
-      if (!date) continue;
-      const weights = sets.filter((s) => s.exercise_id === ex.id && s.weight != null).map((s) => s.weight as number);
-      if (weights.length === 0) continue;
-      points.push({ date, weight: Math.max(...weights) });
-    }
-    return points.sort((a, b) => a.date.localeCompare(b.date));
-  }, [exercises, sets, selectedExerciseName, workoutDateById]);
-
   // Switches the whole tab's date context — the list below already reacts to quickDate
   // and auto-expands whatever's there (see the effect above), so a day with an existing
   // workout just needs a scroll into view; an empty day scrolls to the log form instead.
@@ -422,37 +435,48 @@ function WorkoutsTab() {
 
   return (
     <div>
+      <datalist id={EXERCISE_NAME_LIST_ID}>
+        {exerciseNames.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
+
       <StreakCalendar activeDates={workoutDates} selectedDate={quickDate} onSelectDay={selectCalendarDay} />
 
-      <form id="workout-quick-add" className="quick-add" onSubmit={quickAdd} style={{ flexWrap: "wrap" }}>
-        <input type="date" value={quickDate} onChange={(e) => setQuickDate(e.target.value)} required />
-        <input
-          type="text"
-          placeholder="Workout name (optional)"
-          value={quickName}
-          onChange={(e) => setQuickName(e.target.value)}
-          style={{ flex: 1, minWidth: 140 }}
-        />
-        <button className="btn btn-primary" type="submit">
-          Log workout
-        </button>
-      </form>
-
-      {routines.length > 0 && (
-        <form className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }} onSubmit={startFromRoutine}>
-          <select value={startRoutineId} onChange={(e) => setStartRoutineId(e.target.value)} style={{ flex: "1 1 160px" }}>
-            <option value="">Start from a routine…</option>
-            {routines.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-          <button className="btn" type="submit" disabled={!startRoutineId}>
-            Start
+      <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        <form id="workout-quick-add" className="row" style={{ flex: "1 1 220px", gap: 8 }} onSubmit={quickAdd}>
+          <input
+            type="text"
+            placeholder="Workout name (optional)"
+            value={quickName}
+            onChange={(e) => setQuickName(e.target.value)}
+            style={{ flex: 1, minWidth: 120 }}
+          />
+          <button className="btn btn-primary" type="submit">
+            Start Workout
           </button>
         </form>
-      )}
+
+        {routines.length > 0 && (
+          <form className="row" style={{ flex: "1 1 220px", gap: 8 }} onSubmit={startFromRoutine}>
+            <select
+              value={startRoutineId}
+              onChange={(e) => setStartRoutineId(e.target.value)}
+              style={{ flex: 1, minWidth: 120 }}
+            >
+              <option value="">Start from a routine…</option>
+              {routines.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+            <button className="btn" type="submit" disabled={!startRoutineId}>
+              Start
+            </button>
+          </form>
+        )}
+      </div>
 
       <div className="row-between" style={{ marginBottom: showRoutines ? 10 : 16 }}>
         <h2 style={{ margin: 0 }}>Routines</h2>
@@ -493,50 +517,6 @@ function WorkoutsTab() {
         </div>
       )}
 
-      {exerciseNames.length > 0 && (
-        <div className="card">
-          <div className="field" style={{ marginBottom: selectedExerciseName ? 12 : 0 }}>
-            <label htmlFor="exercise-select">Progress chart</label>
-            <select
-              id="exercise-select"
-              value={selectedExerciseName ?? ""}
-              onChange={(e) => setSelectedExerciseName(e.target.value || null)}
-            >
-              <option value="">Select an exercise…</option>
-              {exerciseNames.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </div>
-          {selectedExerciseName &&
-            (progressData.length === 0 ? (
-              <div className="empty-state">No weight data logged for {selectedExerciseName} yet.</div>
-            ) : (
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={progressData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="date" stroke="var(--border)" tick={axisTick} tickFormatter={shortDate} />
-                    <YAxis stroke="var(--border)" tick={axisTick} width={40} />
-                    <Tooltip contentStyle={tooltipStyle} labelFormatter={shortDate} />
-                    <Line
-                      type="monotone"
-                      dataKey="weight"
-                      name="Weight"
-                      stroke="var(--accent)"
-                      strokeWidth={2}
-                      dot={{ r: 4, fill: "var(--accent)", stroke: "var(--bg-card)", strokeWidth: 2 }}
-                      activeDot={{ r: 5, fill: "var(--accent)", stroke: "var(--bg-card)", strokeWidth: 2 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ))}
-        </div>
-      )}
-
       <div id="workout-day-list">
       {loading ? (
         <div className="empty-state">Loading…</div>
@@ -554,7 +534,7 @@ function WorkoutsTab() {
               expanded={expandedId === w.id}
               onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)}
               onDelete={() => remove(w.id)}
-              onAddExercise={(name) => addExercise(w.id, name)}
+              onAddExercise={(name, exerciseType) => addExercise(w.id, name, exerciseType)}
               onDeleteExercise={removeExercise}
               onAddSet={addSet}
               onUpdateSet={updateSet}
@@ -649,6 +629,7 @@ function RoutineCard({
           <form className="row" style={{ flexWrap: "wrap", marginTop: 10, gap: 8 }} onSubmit={submit}>
             <input
               type="text"
+              list={EXERCISE_NAME_LIST_ID}
               placeholder="Exercise name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -677,53 +658,104 @@ function RoutineCard({
 // are uncontrolled (defaultValue + onBlur) rather than controlled-on-every-keystroke —
 // with a real PATCH round-trip per change, committing on blur avoids firing a request
 // per keystroke while typing a number.
+type SetUpdate = Partial<{
+  weight: number | null;
+  reps: number | null;
+  distance_miles: number | null;
+  duration_seconds: number | null;
+  completed: boolean;
+}>;
+
 function SetRow({
   index,
   set,
   previous,
+  exerciseType,
   onUpdate,
   onDelete,
 }: {
   index: number;
   set: WorkoutSet;
   previous: WorkoutSet | undefined;
-  onUpdate: (data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) => void;
+  exerciseType: ExerciseType;
+  onUpdate: (data: SetUpdate) => void;
   onDelete: () => void;
 }) {
+  const isCardio = exerciseType === "cardio";
+  const previousText = isCardio
+    ? previous && (previous.distance_miles != null || previous.duration_seconds != null)
+      ? `${previous.distance_miles ?? "-"}mi / ${previous.duration_seconds != null ? round1(previous.duration_seconds / 60) : "-"}min`
+      : "-"
+    : previous && (previous.weight != null || previous.reps != null)
+      ? `${previous.weight ?? "-"}x${previous.reps ?? "-"}`
+      : "-";
+
   return (
     <div className="set-row">
       <span className="set-row-index">{index + 1}</span>
-      <span className="set-row-previous text-dim">
-        {previous && (previous.weight != null || previous.reps != null)
-          ? `${previous.weight ?? "-"}x${previous.reps ?? "-"}`
-          : "-"}
-      </span>
-      <input
-        type="number"
-        className="set-input"
-        inputMode="decimal"
-        defaultValue={set.weight ?? ""}
-        placeholder="-"
-        onBlur={(e) => {
-          const v = e.target.value.trim();
-          const next = v ? Number(v) : null;
-          if (next !== set.weight) onUpdate({ weight: next });
-        }}
-        aria-label={`Set ${index + 1} weight`}
-      />
-      <input
-        type="number"
-        className="set-input"
-        inputMode="numeric"
-        defaultValue={set.reps ?? ""}
-        placeholder="-"
-        onBlur={(e) => {
-          const v = e.target.value.trim();
-          const next = v ? Number(v) : null;
-          if (next !== set.reps) onUpdate({ reps: next });
-        }}
-        aria-label={`Set ${index + 1} reps`}
-      />
+      <span className="set-row-previous text-dim">{previousText}</span>
+      {isCardio ? (
+        <>
+          <input
+            type="number"
+            className="set-input"
+            inputMode="decimal"
+            step="0.01"
+            defaultValue={set.distance_miles ?? ""}
+            placeholder="-"
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              const next = v ? Number(v) : null;
+              if (next !== set.distance_miles) onUpdate({ distance_miles: next });
+            }}
+            aria-label={`Set ${index + 1} distance in miles`}
+          />
+          <input
+            type="number"
+            className="set-input"
+            inputMode="decimal"
+            step="0.1"
+            defaultValue={set.duration_seconds != null ? round1(set.duration_seconds / 60) : ""}
+            placeholder="-"
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              const minutes = v ? Number(v) : null;
+              const next = minutes != null ? Math.round(minutes * 60) : null;
+              if (next !== set.duration_seconds) onUpdate({ duration_seconds: next });
+            }}
+            aria-label={`Set ${index + 1} duration in minutes`}
+          />
+        </>
+      ) : (
+        <>
+          <input
+            type="number"
+            className="set-input"
+            inputMode="decimal"
+            defaultValue={set.weight ?? ""}
+            placeholder="-"
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              const next = v ? Number(v) : null;
+              if (next !== set.weight) onUpdate({ weight: next });
+            }}
+            aria-label={`Set ${index + 1} weight`}
+          />
+          <input
+            type="number"
+            className="set-input"
+            inputMode="numeric"
+            defaultValue={set.reps ?? ""}
+            placeholder="-"
+            onBlur={(e) => {
+              const v = e.target.value.trim();
+              const next = v ? Number(v) : null;
+              if (next !== set.reps) onUpdate({ reps: next });
+            }}
+            aria-label={`Set ${index + 1} reps`}
+          />
+        </>
+      )}
       <button
         type="button"
         className={`checkbox-btn${set.completed ? " checked" : ""}`}
@@ -750,17 +782,31 @@ function ExerciseBlock({
   sets: WorkoutSet[];
   previousSets: WorkoutSet[];
   onDelete: () => void;
-  onAddSet: (weight: number | null, reps: number | null) => void;
-  onUpdateSet: (id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) => void;
+  onAddSet: (data: {
+    weight?: number | null;
+    reps?: number | null;
+    distance_miles?: number | null;
+    duration_seconds?: number | null;
+  }) => void;
+  onUpdateSet: (id: string, data: SetUpdate) => void;
   onDeleteSet: (id: string) => void;
 }) {
+  const isCardio = exercise.exercise_type === "cardio";
+
   // A new set starts from whatever the last set in this exercise already has — if this
   // is the very first set, it falls back to the same slot from the previous time this
   // exercise was logged, so a familiar exercise never starts from a blank row.
   function handleAddSet() {
     const last = sets[sets.length - 1];
     const prev = previousSets[sets.length];
-    onAddSet(last?.weight ?? prev?.weight ?? null, last?.reps ?? prev?.reps ?? null);
+    if (isCardio) {
+      onAddSet({
+        distance_miles: last?.distance_miles ?? prev?.distance_miles ?? null,
+        duration_seconds: last?.duration_seconds ?? prev?.duration_seconds ?? null,
+      });
+    } else {
+      onAddSet({ weight: last?.weight ?? prev?.weight ?? null, reps: last?.reps ?? prev?.reps ?? null });
+    }
   }
 
   return (
@@ -777,8 +823,8 @@ function ExerciseBlock({
           <div className="set-row set-row-header text-dim">
             <span>Set</span>
             <span>Previous</span>
-            <span>Lbs</span>
-            <span>Reps</span>
+            <span>{isCardio ? "Mi" : "Lbs"}</span>
+            <span>{isCardio ? "Min" : "Reps"}</span>
             <span />
             <span />
           </div>
@@ -788,6 +834,7 @@ function ExerciseBlock({
               index={i}
               set={s}
               previous={previousSets[i]}
+              exerciseType={exercise.exercise_type}
               onUpdate={(data) => onUpdateSet(s.id, data)}
               onDelete={() => onDeleteSet(s.id)}
             />
@@ -824,16 +871,31 @@ function WorkoutCard({
   expanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
-  onAddExercise: (name: string) => void;
+  onAddExercise: (name: string, exerciseType: ExerciseType) => void;
   onDeleteExercise: (id: string) => void;
-  onAddSet: (exerciseId: string, weight: number | null, reps: number | null) => void;
-  onUpdateSet: (id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) => void;
+  onAddSet: (
+    exerciseId: string,
+    data: { weight?: number | null; reps?: number | null; distance_miles?: number | null; duration_seconds?: number | null }
+  ) => void;
+  onUpdateSet: (id: string, data: SetUpdate) => void;
   onDeleteSet: (id: string) => void;
   onSaveAsRoutine: (name: string) => void;
 }) {
   const [name, setName] = useState("");
+  const [exerciseType, setExerciseType] = useState<ExerciseType>("strength");
+  const [typeTouched, setTypeTouched] = useState(false);
   const [savingRoutine, setSavingRoutine] = useState(false);
   const [routineName, setRoutineName] = useState("");
+
+  // Typing a known cardio exercise name auto-switches the type — same names the backend
+  // reclassifies existing data for — but a manual override always wins, so re-typing the
+  // name afterward doesn't clobber a deliberate choice.
+  function handleNameChange(v: string) {
+    setName(v);
+    if (!typeTouched) {
+      setExerciseType(CARDIO_EXERCISE_NAMES.has(v.trim().toLowerCase()) ? "cardio" : "strength");
+    }
+  }
 
   const exerciseIds = new Set(exercises.map((ex) => ex.id));
   const workoutSets = sets.filter((s) => exerciseIds.has(s.exercise_id));
@@ -844,8 +906,10 @@ function WorkoutCard({
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    onAddExercise(trimmed);
+    onAddExercise(trimmed, exerciseType);
     setName("");
+    setExerciseType("strength");
+    setTypeTouched(false);
   }
 
   function openSaveAsRoutine() {
@@ -907,20 +971,34 @@ function WorkoutCard({
                 sets={sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index)}
                 previousSets={getPreviousSets(ex.name)}
                 onDelete={() => onDeleteExercise(ex.id)}
-                onAddSet={(weight, reps) => onAddSet(ex.id, weight, reps)}
+                onAddSet={(data) => onAddSet(ex.id, data)}
                 onUpdateSet={onUpdateSet}
                 onDeleteSet={onDeleteSet}
               />
             ))
           )}
 
-          <form className="quick-add" onSubmit={submit}>
+          <form className="quick-add" onSubmit={submit} style={{ flexWrap: "wrap" }}>
             <input
               type="text"
+              list={EXERCISE_NAME_LIST_ID}
               placeholder="Exercise name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => handleNameChange(e.target.value)}
+              style={{ flex: "1 1 140px" }}
             />
+            <select
+              value={exerciseType}
+              onChange={(e) => {
+                setExerciseType(e.target.value as ExerciseType);
+                setTypeTouched(true);
+              }}
+              style={{ width: 110 }}
+              aria-label="Exercise type"
+            >
+              <option value="strength">Strength</option>
+              <option value="cardio">Cardio</option>
+            </select>
             <button className="btn btn-primary" type="submit">
               Add
             </button>
@@ -953,11 +1031,9 @@ function WorkoutCard({
 
 function FoodTab() {
   const [selectedDate, setSelectedDate] = useState(() => todayISO());
-  const [trendMeals, setTrendMeals] = useState<Meal[]>([]);
   const [selectedDayMeals, setSelectedDayMeals] = useState<Meal[]>([]);
   const [mealDates, setMealDates] = useState<string[]>([]);
   const [savedFoods, setSavedFoods] = useState<SavedFood[]>([]);
-  const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [dayLoading, setDayLoading] = useState(true);
   const [name, setName] = useState("");
@@ -967,17 +1043,12 @@ function FoodTab() {
   const [fat, setFat] = useState("");
   const [saveAsFood, setSaveAsFood] = useState(false);
 
-  const rangeStart = useMemo(() => addDaysISO(todayISO(), -13), []);
-  const rangeEnd = useMemo(() => todayISO(), []);
-
   useEffect(() => {
     load();
   }, []);
 
-  // The day being viewed can be backdated arbitrarily far — well outside the fixed
-  // 14-day trend window above — so it's fetched separately, scoped to exactly that one
-  // date, every time the date picker changes. Without this, picking anything older than
-  // 14 days would silently show nothing (and lose the entry entirely on next reload).
+  // The day being viewed can be backdated arbitrarily far, so it's fetched separately,
+  // scoped to exactly that one date, every time the selected date changes.
   useEffect(() => {
     loadSelectedDay();
   }, [selectedDate]);
@@ -985,14 +1056,7 @@ function FoodTab() {
   async function load() {
     setLoading(true);
     try {
-      const [mealList, userSettings, foods, dates] = await Promise.all([
-        api.listMeals(rangeStart, rangeEnd),
-        api.getSettings(),
-        api.listSavedFoods(),
-        api.listMealDates(),
-      ]);
-      setTrendMeals(mealList);
-      setSettings(userSettings);
+      const [foods, dates] = await Promise.all([api.listSavedFoods(), api.listMealDates()]);
       setSavedFoods(foods);
       setMealDates(dates);
     } finally {
@@ -1016,14 +1080,6 @@ function FoodTab() {
     }
   }
 
-  // Keeps the 14-day trend chart in sync too, but only when the affected date actually
-  // falls inside that window — no need to refetch it for an old backdated entry.
-  function refreshTrendIfInRange(date: string) {
-    if (date >= rangeStart && date <= rangeEnd) {
-      api.listMeals(rangeStart, rangeEnd).then(setTrendMeals);
-    }
-  }
-
   async function quickAdd(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
@@ -1036,7 +1092,6 @@ function FoodTab() {
     };
     const meal = await api.createMeal({ meal_date: selectedDate, name: trimmed, ...data });
     setSelectedDayMeals((prev) => [meal, ...prev]);
-    refreshTrendIfInRange(selectedDate);
     refreshMealDates();
     if (saveAsFood) {
       const food = await api.createSavedFood({ name: trimmed, ...data });
@@ -1060,7 +1115,6 @@ function FoodTab() {
       fat_g: food.fat_g ?? undefined,
     });
     setSelectedDayMeals((prev) => [meal, ...prev]);
-    refreshTrendIfInRange(selectedDate);
     refreshMealDates();
   }
 
@@ -1072,15 +1126,14 @@ function FoodTab() {
   async function remove(id: string) {
     await api.deleteMeal(id);
     setSelectedDayMeals((prev) => prev.filter((m) => m.id !== id));
-    refreshTrendIfInRange(selectedDate);
     refreshMealDates();
   }
 
   const mealDateSet = useMemo(() => new Set(mealDates), [mealDates]);
 
   // A day with meals already logged just switches the whole page's date context to it
-  // (the existing Date field/meal list/add form below all already react to selectedDate);
-  // an empty day does the same thing, which is exactly "let me add for this day" here.
+  // (the meal list/add form below already react to selectedDate); an empty day does the
+  // same thing, which is exactly "let me add for this day" here.
   function selectCalendarDay(dateStr: string) {
     setSelectedDate(dateStr);
     document.getElementById("food-day-view")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1091,39 +1144,9 @@ function FoodTab() {
     [selectedDayMeals]
   );
 
-  const dailyTotals = useMemo(() => {
-    const days: { date: string; calories: number }[] = [];
-    for (let i = 13; i >= 0; i--) {
-      const date = addDaysISO(rangeEnd, -i);
-      const total = trendMeals.filter((m) => m.meal_date === date).reduce((sum, m) => sum + (m.calories ?? 0), 0);
-      days.push({ date, calories: total });
-    }
-    return days;
-  }, [trendMeals, rangeEnd]);
-
-  const macroTotals = useMemo(
-    () =>
-      dayMeals.reduce(
-        (acc, m) => ({
-          protein: acc.protein + (m.protein_g ?? 0),
-          carbs: acc.carbs + (m.carbs_g ?? 0),
-          fat: acc.fat + (m.fat_g ?? 0),
-        }),
-        { protein: 0, carbs: 0, fat: 0 }
-      ),
-    [dayMeals]
-  );
-
-  const calorieTarget = settings?.calorie_target ?? null;
-
   return (
     <div>
       <StreakCalendar activeDates={mealDateSet} selectedDate={selectedDate} onSelectDay={selectCalendarDay} />
-
-      <div id="food-day-view" className="field">
-        <label htmlFor="meal-date">Date</label>
-        <input id="meal-date" type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
-      </div>
 
       {savedFoods.length > 0 && (
         <div style={{ marginBottom: 12 }}>
@@ -1164,7 +1187,7 @@ function FoodTab() {
         </div>
       )}
 
-      <form className="quick-add" onSubmit={quickAdd} style={{ flexWrap: "wrap" }}>
+      <form id="food-day-view" className="quick-add" onSubmit={quickAdd} style={{ flexWrap: "wrap" }}>
         <input
           type="text"
           placeholder="Meal name"
@@ -1205,34 +1228,6 @@ function FoodTab() {
         </span>
       </label>
 
-      <h2>Calorie trend (14 days)</h2>
-      <div className="chart-container">
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={dailyTotals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
-            <CartesianGrid stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="date" stroke="var(--border)" tick={axisTick} tickFormatter={shortDate} />
-            <YAxis stroke="var(--border)" tick={axisTick} width={40} />
-            <Tooltip contentStyle={tooltipStyle} labelFormatter={shortDate} />
-            <Bar dataKey="calories" name="Calories" fill="var(--accent)" radius={[4, 4, 0, 0]} maxBarSize={20} />
-            {calorieTarget != null && (
-              <ReferenceLine
-                y={calorieTarget}
-                stroke="var(--text-faint)"
-                strokeDasharray="4 4"
-                label={{ value: "Target", fill: "var(--text-dim)", fontSize: 11, position: "insideTopRight" }}
-              />
-            )}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <h2>Macros — {selectedDate}</h2>
-      <div className="row" style={{ flexWrap: "wrap", marginBottom: 16, gap: 8 }}>
-        <span className="chip chip-accent">Protein {round1(macroTotals.protein)}g</span>
-        <span className="chip">Carbs {round1(macroTotals.carbs)}g</span>
-        <span className="chip">Fat {round1(macroTotals.fat)}g</span>
-      </div>
-
       {loading || dayLoading ? (
         <div className="empty-state">Loading…</div>
       ) : dayMeals.length === 0 ? (
@@ -1263,8 +1258,194 @@ function FoodTab() {
   );
 }
 
+// Combines the workout progress chart and the food calorie/macro trend in one place —
+// these previously lived on the Workouts and Food tabs, but the date on each of those
+// tabs is now driven entirely by the streak calendar, so a separate glance-at-trends
+// page made more sense than cluttering the day-logging tabs with charts.
+function StatsTab() {
+  const [loading, setLoading] = useState(true);
+  const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
+  const [sets, setSets] = useState<WorkoutSet[]>([]);
+  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
+  const [trendMeals, setTrendMeals] = useState<Meal[]>([]);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
+
+  const rangeStart = useMemo(() => addDaysISO(todayISO(), -13), []);
+  const rangeEnd = useMemo(() => todayISO(), []);
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [workoutData, mealList, userSettings] = await Promise.all([
+        api.getWorkouts(),
+        api.listMeals(rangeStart, rangeEnd),
+        api.getSettings(),
+      ]);
+      setWorkouts(workoutData.workouts);
+      setExercises(workoutData.exercises);
+      setSets(workoutData.sets);
+      setTrendMeals(mealList);
+      setSettings(userSettings);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const workoutDateById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of workouts) m.set(w.id, w.workout_date);
+    return m;
+  }, [workouts]);
+
+  // Weight-over-time only makes sense for strength exercises — cardio ones track
+  // distance/duration instead, so they're left out of this dropdown.
+  const exerciseNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const ex of exercises) {
+      if (ex.exercise_type !== "strength") continue;
+      const key = ex.name.trim().toLowerCase();
+      if (key && !names.has(key)) names.set(key, ex.name.trim());
+    }
+    return Array.from(names.values()).sort((a, b) => a.localeCompare(b));
+  }, [exercises]);
+
+  // Plots the heaviest set logged for this exercise on each date it appears — a per-set
+  // model has no single "the" weight for a given day, so the top set is the meaningful
+  // number for a progress trend.
+  const progressData = useMemo(() => {
+    if (!selectedExerciseName) return [];
+    const key = selectedExerciseName.toLowerCase();
+    const points: { date: string; weight: number }[] = [];
+    for (const ex of exercises) {
+      if (ex.name.trim().toLowerCase() !== key) continue;
+      const date = workoutDateById.get(ex.workout_id);
+      if (!date) continue;
+      const weights = sets.filter((s) => s.exercise_id === ex.id && s.weight != null).map((s) => s.weight as number);
+      if (weights.length === 0) continue;
+      points.push({ date, weight: Math.max(...weights) });
+    }
+    return points.sort((a, b) => a.date.localeCompare(b.date));
+  }, [exercises, sets, selectedExerciseName, workoutDateById]);
+
+  const dailyTotals = useMemo(() => {
+    const days: { date: string; calories: number }[] = [];
+    for (let i = 13; i >= 0; i--) {
+      const date = addDaysISO(rangeEnd, -i);
+      const total = trendMeals.filter((m) => m.meal_date === date).reduce((sum, m) => sum + (m.calories ?? 0), 0);
+      days.push({ date, calories: total });
+    }
+    return days;
+  }, [trendMeals, rangeEnd]);
+
+  const todayMacros = useMemo(
+    () =>
+      trendMeals
+        .filter((m) => m.meal_date === rangeEnd)
+        .reduce(
+          (acc, m) => ({
+            protein: acc.protein + (m.protein_g ?? 0),
+            carbs: acc.carbs + (m.carbs_g ?? 0),
+            fat: acc.fat + (m.fat_g ?? 0),
+          }),
+          { protein: 0, carbs: 0, fat: 0 }
+        ),
+    [trendMeals, rangeEnd]
+  );
+
+  const calorieTarget = settings?.calorie_target ?? null;
+
+  if (loading) {
+    return <div className="empty-state">Loading…</div>;
+  }
+
+  return (
+    <div>
+      <h2>Workout Progress</h2>
+      {exerciseNames.length === 0 ? (
+        <div className="empty-state">No strength exercises logged yet.</div>
+      ) : (
+        <div className="card" style={{ marginBottom: 24 }}>
+          <div className="field" style={{ marginBottom: selectedExerciseName ? 12 : 0 }}>
+            <label htmlFor="exercise-select">Exercise</label>
+            <select
+              id="exercise-select"
+              value={selectedExerciseName ?? ""}
+              onChange={(e) => setSelectedExerciseName(e.target.value || null)}
+            >
+              <option value="">Select an exercise…</option>
+              {exerciseNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedExerciseName &&
+            (progressData.length === 0 ? (
+              <div className="empty-state">No weight data logged for {selectedExerciseName} yet.</div>
+            ) : (
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={progressData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="date" stroke="var(--border)" tick={axisTick} tickFormatter={shortDate} />
+                    <YAxis stroke="var(--border)" tick={axisTick} width={40} />
+                    <Tooltip contentStyle={tooltipStyle} labelFormatter={shortDate} />
+                    <Line
+                      type="monotone"
+                      dataKey="weight"
+                      name="Weight"
+                      stroke="var(--accent)"
+                      strokeWidth={2}
+                      dot={{ r: 4, fill: "var(--accent)", stroke: "var(--bg-card)", strokeWidth: 2 }}
+                      activeDot={{ r: 5, fill: "var(--accent)", stroke: "var(--bg-card)", strokeWidth: 2 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ))}
+        </div>
+      )}
+
+      <h2>Calorie trend (14 days)</h2>
+      <div className="chart-container">
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={dailyTotals} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" stroke="var(--border)" tick={axisTick} tickFormatter={shortDate} />
+            <YAxis stroke="var(--border)" tick={axisTick} width={40} />
+            <Tooltip contentStyle={tooltipStyle} labelFormatter={shortDate} />
+            <Bar dataKey="calories" name="Calories" fill="var(--accent)" radius={[4, 4, 0, 0]} maxBarSize={20} />
+            {calorieTarget != null && (
+              <ReferenceLine
+                y={calorieTarget}
+                stroke="var(--text-faint)"
+                strokeDasharray="4 4"
+                label={{ value: "Target", fill: "var(--text-dim)", fontSize: 11, position: "insideTopRight" }}
+              />
+            )}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <h2>Macros today</h2>
+      <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <span className="chip chip-accent">Protein {round1(todayMacros.protein)}g</span>
+        <span className="chip">Carbs {round1(todayMacros.carbs)}g</span>
+        <span className="chip">Fat {round1(todayMacros.fat)}g</span>
+      </div>
+    </div>
+  );
+}
+
 function WeightTab() {
   const [entries, setEntries] = useState<WeightEntry[]>([]);
+  const [goalWeight, setGoalWeight] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [date, setDate] = useState(() => todayISO());
   const [weight, setWeight] = useState("");
@@ -1277,7 +1458,9 @@ function WeightTab() {
   async function load() {
     setLoading(true);
     try {
-      setEntries(await api.listWeightEntries());
+      const [weightEntries, settings] = await Promise.all([api.listWeightEntries(), api.getSettings()]);
+      setEntries(weightEntries);
+      setGoalWeight(settings.goal_weight_lbs);
     } finally {
       setLoading(false);
     }
@@ -1299,6 +1482,15 @@ function WeightTab() {
   }
 
   const chartData = useMemo(() => entries.map((e) => ({ date: e.entry_date, weight: e.weight_lbs })), [entries]);
+
+  // Includes the goal weight in the axis range — otherwise the goal reference line can
+  // fall outside a domain sized only to the logged data and never render.
+  const chartYDomain = useMemo((): [number, number] => {
+    const values = entries.map((e) => e.weight_lbs);
+    if (goalWeight != null) values.push(goalWeight);
+    if (values.length === 0) return [0, 100];
+    return [Math.floor(Math.min(...values) - 3), Math.ceil(Math.max(...values) + 3)];
+  }, [entries, goalWeight]);
 
   const latest = entries.length > 0 ? entries[entries.length - 1] : null;
   const previous = entries.length > 1 ? entries[entries.length - 2] : null;
@@ -1331,12 +1523,18 @@ function WeightTab() {
         </button>
       </form>
 
-      {latest && (
+      {(latest || goalWeight != null) && (
         <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-          <span className="chip chip-accent">Latest: {latest.weight_lbs} lb</span>
+          {latest && <span className="chip chip-accent">Latest: {latest.weight_lbs} lb</span>}
           {delta != null && (
             <span className={`chip ${delta > 0 ? "chip-warning" : delta < 0 ? "" : ""}`}>
               {delta > 0 ? "▲" : delta < 0 ? "▼" : "–"} {Math.abs(delta)} lb since last entry
+            </span>
+          )}
+          {goalWeight != null && (
+            <span className="chip">
+              Goal: {goalWeight} lb
+              {latest && ` (${round1(Math.abs(latest.weight_lbs - goalWeight))} lb to go)`}
             </span>
           )}
         </div>
@@ -1357,9 +1555,17 @@ function WeightTab() {
                   stroke="var(--border)"
                   tick={axisTick}
                   width={40}
-                  domain={[(min: number) => Math.floor(min - 3), (max: number) => Math.ceil(max + 3)]}
+                  domain={chartYDomain}
                 />
                 <Tooltip contentStyle={tooltipStyle} labelFormatter={shortDate} formatter={(v: number) => [`${v} lb`, "Weight"]} />
+                {goalWeight != null && (
+                  <ReferenceLine
+                    y={goalWeight}
+                    stroke="var(--success)"
+                    strokeDasharray="4 4"
+                    label={{ value: "Goal", fill: "var(--text-dim)", fontSize: 11, position: "insideTopRight" }}
+                  />
+                )}
                 <Line
                   type="monotone"
                   dataKey="weight"

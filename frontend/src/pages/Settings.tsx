@@ -8,6 +8,7 @@ export default function Settings() {
   const [proteinTarget, setProteinTarget] = useState("");
   const [carbsTarget, setCarbsTarget] = useState("");
   const [fatTarget, setFatTarget] = useState("");
+  const [goalWeight, setGoalWeight] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
@@ -22,6 +23,7 @@ export default function Settings() {
       setProteinTarget(s.protein_target_g != null ? String(s.protein_target_g) : "");
       setCarbsTarget(s.carbs_target_g != null ? String(s.carbs_target_g) : "");
       setFatTarget(s.fat_target_g != null ? String(s.fat_target_g) : "");
+      setGoalWeight(s.goal_weight_lbs != null ? String(s.goal_weight_lbs) : "");
       setTheme(s.theme);
     } finally {
       setLoading(false);
@@ -37,12 +39,14 @@ export default function Settings() {
         protein_target_g: proteinTarget ? Number(proteinTarget) : null,
         carbs_target_g: carbsTarget ? Number(carbsTarget) : null,
         fat_target_g: fatTarget ? Number(fatTarget) : null,
+        goal_weight_lbs: goalWeight ? Number(goalWeight) : null,
         theme,
       });
       setCalorieTarget(updated.calorie_target != null ? String(updated.calorie_target) : "");
       setProteinTarget(updated.protein_target_g != null ? String(updated.protein_target_g) : "");
       setCarbsTarget(updated.carbs_target_g != null ? String(updated.carbs_target_g) : "");
       setFatTarget(updated.fat_target_g != null ? String(updated.fat_target_g) : "");
+      setGoalWeight(updated.goal_weight_lbs != null ? String(updated.goal_weight_lbs) : "");
       setTheme(updated.theme);
     } finally {
       setSaving(false);
@@ -100,6 +104,17 @@ export default function Settings() {
             value={fatTarget}
             onChange={(e) => setFatTarget(e.target.value)}
             placeholder="e.g. 70"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="goal-weight">Goal weight (lb)</label>
+          <input
+            id="goal-weight"
+            type="number"
+            step="0.1"
+            value={goalWeight}
+            onChange={(e) => setGoalWeight(e.target.value)}
+            placeholder="e.g. 180"
           />
         </div>
         <div className="field">

@@ -9,6 +9,7 @@ interface SettingsRow {
   protein_target_g: number | null;
   carbs_target_g: number | null;
   fat_target_g: number | null;
+  goal_weight_lbs: number | null;
   theme: "dark" | "light";
 }
 
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS = {
   protein_target_g: null as number | null,
   carbs_target_g: null as number | null,
   fat_target_g: null as number | null,
+  goal_weight_lbs: null as number | null,
   theme: "dark" as "dark" | "light",
 };
 
@@ -26,6 +28,7 @@ function serialize(row: SettingsRow) {
     protein_target_g: row.protein_target_g,
     carbs_target_g: row.carbs_target_g,
     fat_target_g: row.fat_target_g,
+    goal_weight_lbs: row.goal_weight_lbs,
     theme: row.theme,
   };
 }
@@ -42,26 +45,36 @@ settingsRouter.get("/", (req, res) => {
 settingsRouter.patch("/", (req, res) => {
   const existing = db.query<SettingsRow, [string]>("SELECT * FROM user_settings WHERE user_id = ?").get(req.uid);
   const base = existing ? serialize(existing) : DEFAULT_SETTINGS;
-  const { calorie_target, protein_target_g, carbs_target_g, fat_target_g, theme } = req.body ?? {};
+  const { calorie_target, protein_target_g, carbs_target_g, fat_target_g, goal_weight_lbs, theme } = req.body ?? {};
 
   const next = {
     calorie_target: calorie_target === undefined ? base.calorie_target : calorie_target,
     protein_target_g: protein_target_g === undefined ? base.protein_target_g : protein_target_g,
     carbs_target_g: carbs_target_g === undefined ? base.carbs_target_g : carbs_target_g,
     fat_target_g: fat_target_g === undefined ? base.fat_target_g : fat_target_g,
+    goal_weight_lbs: goal_weight_lbs === undefined ? base.goal_weight_lbs : goal_weight_lbs,
     theme: theme === "light" || theme === "dark" ? theme : base.theme,
   };
 
   db.query(
-    `INSERT INTO user_settings (user_id, calorie_target, protein_target_g, carbs_target_g, fat_target_g, theme)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO user_settings (user_id, calorie_target, protein_target_g, carbs_target_g, fat_target_g, goal_weight_lbs, theme)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id) DO UPDATE SET
        calorie_target = excluded.calorie_target,
        protein_target_g = excluded.protein_target_g,
        carbs_target_g = excluded.carbs_target_g,
        fat_target_g = excluded.fat_target_g,
+       goal_weight_lbs = excluded.goal_weight_lbs,
        theme = excluded.theme`
-  ).run(req.uid, next.calorie_target, next.protein_target_g, next.carbs_target_g, next.fat_target_g, next.theme);
+  ).run(
+    req.uid,
+    next.calorie_target,
+    next.protein_target_g,
+    next.carbs_target_g,
+    next.fat_target_g,
+    next.goal_weight_lbs,
+    next.theme
+  );
 
   res.json(next);
 });

@@ -176,6 +176,7 @@ CREATE TABLE IF NOT EXISTS workout_exercises (
   user_id TEXT NOT NULL,
   workout_id TEXT NOT NULL,
   name TEXT NOT NULL,
+  exercise_type TEXT NOT NULL DEFAULT 'strength', -- 'strength' | 'cardio'
   sets INTEGER,
   reps INTEGER,
   weight REAL,
@@ -185,6 +186,10 @@ CREATE TABLE IF NOT EXISTS workout_exercises (
 CREATE INDEX IF NOT EXISTS idx_workout_exercises_user ON workout_exercises(user_id);
 CREATE INDEX IF NOT EXISTS idx_workout_exercises_workout ON workout_exercises(workout_id);
 
+-- weight/reps are used for a 'strength' exercise's sets; distance_miles/duration_seconds
+-- for a 'cardio' one (see exercise_type above) — one set row always leaves the other
+-- pair null rather than this being two separate tables, since a set is still fundamentally
+-- "one unit of this exercise, done, on this date" either way.
 CREATE TABLE IF NOT EXISTS workout_sets (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -192,6 +197,8 @@ CREATE TABLE IF NOT EXISTS workout_sets (
   set_index INTEGER NOT NULL DEFAULT 0,
   weight REAL,
   reps INTEGER,
+  distance_miles REAL,
+  duration_seconds INTEGER,
   completed INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_workout_sets_user ON workout_sets(user_id);
@@ -218,6 +225,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   protein_target_g REAL,
   carbs_target_g REAL,
   fat_target_g REAL,
+  goal_weight_lbs REAL,
   theme TEXT NOT NULL DEFAULT 'dark'
 );
 
@@ -280,6 +288,70 @@ CREATE INDEX IF NOT EXISTS idx_weight_entries_date ON weight_entries(entry_date)
   }
 
   backfillWorkoutSets(db);
+
+  // exercise_type / distance_miles / duration_seconds were added after per-set logging
+  // shipped — ADD COLUMN for any DB from before that, then reclassify + backfill cardio
+  // exercises (see backfillCardioExercises below). No-ops on a fresh install, since the
+  // CREATE TABLE statements above already include these columns there.
+  if (!tableColumns(db, "workout_exercises").includes("exercise_type")) {
+    db.exec("ALTER TABLE workout_exercises ADD COLUMN exercise_type TEXT NOT NULL DEFAULT 'strength'");
+  }
+  if (!tableColumns(db, "workout_sets").includes("distance_miles")) {
+    db.exec("ALTER TABLE workout_sets ADD COLUMN distance_miles REAL");
+  }
+  if (!tableColumns(db, "workout_sets").includes("duration_seconds")) {
+    db.exec("ALTER TABLE workout_sets ADD COLUMN duration_seconds INTEGER");
+  }
+  backfillCardioExercises(db);
+
+  if (!tableColumns(db, "user_settings").includes("goal_weight_lbs")) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN goal_weight_lbs REAL");
+  }
+}
+
+interface LegacyCardioExerciseRow {
+  id: string;
+  name: string;
+  exercise_type: string;
+  notes: string;
+}
+
+// Cardio exercises (currently just Treadmill/Walking — the only ones this app has ever
+// seen, from the workout CSV import) were logged with null weight/reps and their real
+// distance/duration folded into the exercise's notes text as "X mi, Y min". Reclassifies
+// them as 'cardio' and parses that text back into the new structured columns on their
+// existing set row(s), rather than leaving distance/duration as free text forever.
+// Future cardio exercises are typed explicitly at creation time — this is purely a
+// one-time correction for data that predates exercise_type existing at all.
+const CARDIO_EXERCISE_NAMES = new Set(["treadmill", "walking"]);
+
+function backfillCardioExercises(db: Database): void {
+  const candidates = db
+    .query<LegacyCardioExerciseRow, []>(
+      "SELECT id, name, exercise_type, notes FROM workout_exercises WHERE exercise_type = 'strength'"
+    )
+    .all()
+    .filter((ex) => CARDIO_EXERCISE_NAMES.has(ex.name.trim().toLowerCase()));
+  if (candidates.length === 0) return;
+
+  const markCardio = db.query("UPDATE workout_exercises SET exercise_type = 'cardio' WHERE id = ?");
+  const updateSet = db.query(
+    "UPDATE workout_sets SET distance_miles = ?, duration_seconds = ?, weight = NULL, reps = NULL WHERE id = ?"
+  );
+  const setsForExercise = db.query<{ id: string }, [string]>(
+    "SELECT id FROM workout_sets WHERE exercise_id = ? ORDER BY set_index ASC"
+  );
+
+  for (const ex of candidates) {
+    markCardio.run(ex.id);
+    const milesMatch = ex.notes.match(/([\d.]+)\s*mi/);
+    const minutesMatch = ex.notes.match(/(\d+)\s*min/);
+    const distance = milesMatch ? parseFloat(milesMatch[1]) : null;
+    const duration = minutesMatch ? parseInt(minutesMatch[1], 10) * 60 : null;
+    for (const row of setsForExercise.all(ex.id)) {
+      updateSet.run(distance, duration, row.id);
+    }
+  }
 }
 
 interface LegacyExerciseRow {

@@ -28,8 +28,11 @@ function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+const UNDATED_TODO_LIMIT = 5;
+
 export default function Today() {
   const [todosDue, setTodosDue] = useState<Todo[]>([]);
+  const [undatedTodos, setUndatedTodos] = useState<Todo[]>([]);
   const [billsDue, setBillsDue] = useState<Bill[]>([]);
   const [tasksDue, setTasksDue] = useState<RecurringTask[]>([]);
   const [eventsToday, setEventsToday] = useState<CalendarEvent[]>([]);
@@ -44,8 +47,14 @@ export default function Today() {
   async function load() {
     setLoading(true);
     try {
-      const [data, mealDates, workoutData] = await Promise.all([api.getToday(), api.listMealDates(), api.getWorkouts()]);
+      const [data, allTodos, mealDates, workoutData] = await Promise.all([
+        api.getToday(),
+        api.getTodos(),
+        api.listMealDates(),
+        api.getWorkouts(),
+      ]);
       setTodosDue(data.todosDue);
+      setUndatedTodos(allTodos.todos.filter((t) => !t.completed && !t.due_at));
       setBillsDue(data.billsDue);
       setTasksDue(data.tasksDue);
       setEventsToday(data.eventsToday);
@@ -59,6 +68,7 @@ export default function Today() {
 
   async function completeTodo(id: string) {
     setTodosDue((prev) => prev.filter((t) => t.id !== id));
+    setUndatedTodos((prev) => prev.filter((t) => t.id !== id));
     try {
       await api.completeTodo(id, true);
     } catch {
@@ -87,6 +97,7 @@ export default function Today() {
   const nothingDue =
     !loading &&
     todosDue.length === 0 &&
+    undatedTodos.length === 0 &&
     billsDue.length === 0 &&
     tasksDue.length === 0 &&
     eventsToday.length === 0 &&
@@ -152,6 +163,32 @@ export default function Today() {
                   </div>
                 ))}
               </div>
+            </section>
+          )}
+
+          {undatedTodos.length > 0 && (
+            <section>
+              <h2>On Your List</h2>
+              <div className="list">
+                {undatedTodos.slice(0, UNDATED_TODO_LIMIT).map((todo) => (
+                  <div className="card" key={todo.id}>
+                    <div className="row" style={{ flex: 1 }}>
+                      <button
+                        type="button"
+                        className="checkbox-btn"
+                        onClick={() => completeTodo(todo.id)}
+                        aria-label="Mark complete"
+                      />
+                      <span>{todo.title}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {undatedTodos.length > UNDATED_TODO_LIMIT && (
+                <Link to="/todos" className="text-dim" style={{ display: "inline-block", marginTop: 8 }}>
+                  +{undatedTodos.length - UNDATED_TODO_LIMIT} more on your todo list
+                </Link>
+              )}
             </section>
           )}
 

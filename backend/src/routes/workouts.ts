@@ -17,6 +17,7 @@ interface WorkoutExerciseRow {
   user_id: string;
   workout_id: string;
   name: string;
+  exercise_type: string;
   notes: string;
   sort_order: number;
 }
@@ -28,6 +29,8 @@ interface WorkoutSetRow {
   set_index: number;
   weight: number | null;
   reps: number | null;
+  distance_miles: number | null;
+  duration_seconds: number | null;
   completed: number;
 }
 
@@ -46,6 +49,7 @@ function serializeExercise(row: WorkoutExerciseRow) {
     id: row.id,
     workout_id: row.workout_id,
     name: row.name,
+    exercise_type: row.exercise_type,
     notes: row.notes,
     sort_order: row.sort_order,
   };
@@ -58,6 +62,8 @@ function serializeSet(row: WorkoutSetRow) {
     set_index: row.set_index,
     weight: row.weight,
     reps: row.reps,
+    distance_miles: row.distance_miles,
+    duration_seconds: row.duration_seconds,
     completed: row.completed === 1,
   };
 }
@@ -71,7 +77,7 @@ workoutsRouter.get("/", (req, res) => {
     .all(req.uid);
   const exercises = db
     .query<WorkoutExerciseRow, [string]>(
-      "SELECT id, user_id, workout_id, name, notes, sort_order FROM workout_exercises WHERE user_id = ? ORDER BY sort_order ASC"
+      "SELECT id, user_id, workout_id, name, exercise_type, notes, sort_order FROM workout_exercises WHERE user_id = ? ORDER BY sort_order ASC"
     )
     .all(req.uid);
   const sets = db
@@ -143,22 +149,23 @@ workoutsRouter.post("/:workoutId/exercises", (req, res) => {
     res.status(404).json({ error: "workout not found" });
     return;
   }
-  const { name, notes = "" } = req.body ?? {};
+  const { name, notes = "", exercise_type = "strength" } = req.body ?? {};
   if (typeof name !== "string" || !name.trim()) {
     res.status(400).json({ error: "name is required" });
     return;
   }
+  const type = exercise_type === "cardio" ? "cardio" : "strength";
   const maxOrderRow = db
     .query<{ m: number | null }, [string]>("SELECT MAX(sort_order) as m FROM workout_exercises WHERE workout_id = ?")
     .get(req.params.workoutId);
   const sort_order = (maxOrderRow?.m ?? -1) + 1;
   const id = crypto.randomUUID();
   db.query(
-    "INSERT INTO workout_exercises (id, user_id, workout_id, name, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, req.uid, req.params.workoutId, name.trim(), typeof notes === "string" ? notes : "", sort_order);
+    "INSERT INTO workout_exercises (id, user_id, workout_id, name, exercise_type, notes, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, req.uid, req.params.workoutId, name.trim(), type, typeof notes === "string" ? notes : "", sort_order);
   const row = db
     .query<WorkoutExerciseRow, [string]>(
-      "SELECT id, user_id, workout_id, name, notes, sort_order FROM workout_exercises WHERE id = ?"
+      "SELECT id, user_id, workout_id, name, exercise_type, notes, sort_order FROM workout_exercises WHERE id = ?"
     )
     .get(id)!;
   res.status(201).json(serializeExercise(row));
@@ -180,14 +187,14 @@ workoutsRouter.post("/exercises/:exerciseId/sets", (req, res) => {
     res.status(404).json({ error: "exercise not found" });
     return;
   }
-  const { weight = null, reps = null, completed = false } = req.body ?? {};
+  const { weight = null, reps = null, distance_miles = null, duration_seconds = null, completed = false } = req.body ?? {};
   const maxOrderRow = db
     .query<{ m: number | null }, [string]>("SELECT MAX(set_index) as m FROM workout_sets WHERE exercise_id = ?")
     .get(req.params.exerciseId);
   const set_index = (maxOrderRow?.m ?? -1) + 1;
   const id = crypto.randomUUID();
   db.query(
-    "INSERT INTO workout_sets (id, user_id, exercise_id, set_index, weight, reps, completed) VALUES (?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO workout_sets (id, user_id, exercise_id, set_index, weight, reps, distance_miles, duration_seconds, completed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
   ).run(
     id,
     req.uid,
@@ -195,6 +202,8 @@ workoutsRouter.post("/exercises/:exerciseId/sets", (req, res) => {
     set_index,
     typeof weight === "number" ? weight : null,
     typeof reps === "number" ? reps : null,
+    typeof distance_miles === "number" ? distance_miles : null,
+    typeof duration_seconds === "number" ? duration_seconds : null,
     completed ? 1 : 0
   );
   const row = db.query<WorkoutSetRow, [string]>("SELECT * FROM workout_sets WHERE id = ?").get(id)!;
@@ -209,15 +218,27 @@ workoutsRouter.patch("/sets/:id", (req, res) => {
     res.status(404).json({ error: "not found" });
     return;
   }
-  const { weight, reps, completed } = req.body ?? {};
+  const { weight, reps, distance_miles, duration_seconds, completed } = req.body ?? {};
   const next = {
     weight: weight === undefined ? existing.weight : typeof weight === "number" ? weight : null,
     reps: reps === undefined ? existing.reps : typeof reps === "number" ? reps : null,
+    distance_miles:
+      distance_miles === undefined ? existing.distance_miles : typeof distance_miles === "number" ? distance_miles : null,
+    duration_seconds:
+      duration_seconds === undefined
+        ? existing.duration_seconds
+        : typeof duration_seconds === "number"
+          ? duration_seconds
+          : null,
     completed: completed === undefined ? existing.completed : completed ? 1 : 0,
   };
-  db.query("UPDATE workout_sets SET weight = ?, reps = ?, completed = ? WHERE id = ? AND user_id = ?").run(
+  db.query(
+    "UPDATE workout_sets SET weight = ?, reps = ?, distance_miles = ?, duration_seconds = ?, completed = ? WHERE id = ? AND user_id = ?"
+  ).run(
     next.weight,
     next.reps,
+    next.distance_miles,
+    next.duration_seconds,
     next.completed,
     req.params.id,
     req.uid
