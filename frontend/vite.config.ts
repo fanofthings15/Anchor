@@ -59,14 +59,20 @@ export default defineConfig({
             method: "GET",
             handler: "NetworkFirst",
             options: {
-              // Renamed from the first cut of this feature (anchor-api-cache), which had
-              // no client-side re-validation on notes and could have kept serving an
-              // unlocked note's full content past its lock — this abandons that cache
-              // outright rather than risk anything still resolving from it.
-              cacheName: "anchor-api-cache-v2",
+              // v3: the v2 cache accepted status 0 as cacheable, which was meant for
+              // opaque cross-origin responses but this app has none — every /api/* call is
+              // same-origin. The real effect: api/client.ts's request() wrapper uses
+              // `redirect: "manual"` to detect an expired Authentik session (the response
+              // comes back as type "opaqueredirect", status 0), and that got cached right
+              // alongside real 200s. Once cached, any later network hiccup on that same URL
+              // fell back to the stale "you need to log in again" sentinel instead of
+              // retrying — permanently treating an endpoint as logged-out even after a
+              // fresh, valid session, until the cache was manually cleared. Renamed again
+              // (v2 -> v3) to abandon any such entries already poisoned on real devices.
+              cacheName: "anchor-api-cache-v3",
               networkTimeoutSeconds: 4,
               expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
-              cacheableResponse: { statuses: [0, 200] },
+              cacheableResponse: { statuses: [200] },
             },
           },
           {
