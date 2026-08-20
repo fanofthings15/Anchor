@@ -1,6 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type Bill, type CalendarEvent, type RecurringTask, type ShoppingList, type Todo, type TodoList } from "../api/client";
+import {
+  api,
+  type Bill,
+  type CalendarEvent,
+  type RecurringTask,
+  type ShoppingList,
+  type Todo,
+  type TodoList,
+  type WeekRecap,
+} from "../api/client";
 import { todayISO } from "../calendarUtils";
 
 // UTC-based — matches how todos/bills/recurring-task dates are stored (full ISO
@@ -28,6 +37,10 @@ function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function pluralize(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
 const UNDATED_TODO_LIMIT = 5;
 
 export default function Today() {
@@ -36,6 +49,7 @@ export default function Today() {
   const [billsDue, setBillsDue] = useState<Bill[]>([]);
   const [tasksDue, setTasksDue] = useState<RecurringTask[]>([]);
   const [eventsToday, setEventsToday] = useState<CalendarEvent[]>([]);
+  const [weekRecap, setWeekRecap] = useState<WeekRecap | null>(null);
   const [loggedFoodToday, setLoggedFoodToday] = useState(true);
   const [loggedWorkoutToday, setLoggedWorkoutToday] = useState(true);
   const [loading, setLoading] = useState(true);
@@ -66,6 +80,7 @@ export default function Today() {
       setBillsDue(data.billsDue);
       setTasksDue(data.tasksDue);
       setEventsToday(data.eventsToday);
+      setWeekRecap(data.weekRecap);
       const today = todayISO();
       setLoggedFoodToday(mealDates.includes(today));
       setLoggedWorkoutToday(workoutData.workouts.some((w) => w.workout_date === today));
@@ -165,6 +180,45 @@ export default function Today() {
               </form>
             )}
           </div>
+        </section>
+      )}
+
+      {!loading && weekRecap && (
+        <section>
+          <h2>This Week</h2>
+          {weekRecap.todosCompleted === 0 &&
+          weekRecap.workoutsLogged === 0 &&
+          weekRecap.billsPaid === 0 &&
+          weekRecap.tasksCompleted === 0 ? (
+            <div className="card text-dim">Nothing logged yet this week — plenty of time.</div>
+          ) : (
+            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+              {weekRecap.todosCompleted > 0 && (
+                <div className="card" style={{ flex: "1 1 140px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.todosCompleted}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.todosCompleted, "todo")} done</div>
+                </div>
+              )}
+              {weekRecap.workoutsLogged > 0 && (
+                <div className="card" style={{ flex: "1 1 140px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.workoutsLogged}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.workoutsLogged, "workout")}</div>
+                </div>
+              )}
+              {weekRecap.tasksCompleted > 0 && (
+                <div className="card" style={{ flex: "1 1 140px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.tasksCompleted}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.tasksCompleted, "chore")} done</div>
+                </div>
+              )}
+              {weekRecap.billsPaid > 0 && (
+                <div className="card" style={{ flex: "1 1 140px" }}>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{formatCents(weekRecap.billsPaidCents)}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.billsPaid, "bill")} paid</div>
+                </div>
+              )}
+            </div>
+          )}
         </section>
       )}
 

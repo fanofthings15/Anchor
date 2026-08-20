@@ -297,11 +297,20 @@ export interface UserSettings {
   theme: "dark" | "light";
 }
 
+export interface WeekRecap {
+  todosCompleted: number;
+  workoutsLogged: number;
+  billsPaid: number;
+  billsPaidCents: number;
+  tasksCompleted: number;
+}
+
 export interface TodayResponse {
   todosDue: Todo[];
   billsDue: Bill[];
   tasksDue: RecurringTask[];
   eventsToday: CalendarEvent[];
+  weekRecap: WeekRecap;
 }
 
 export const api = {

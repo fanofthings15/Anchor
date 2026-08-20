@@ -156,5 +156,49 @@ todayRouter.get("/", (req, res) => {
     .all(req.uid)
     .map(serializeCalendarEvent);
 
-  res.json({ todosDue, billsDue, tasksDue, eventsToday });
+  res.json({ todosDue, billsDue, tasksDue, eventsToday, weekRecap: getWeekRecap(req.uid) });
 });
+
+// A rolling 7-day window (not calendar-week) — so this always shows something in
+// progress rather than resetting to zero every Monday, which would undercut the point
+// of a motivational recap right when the week is just getting started.
+function getWeekRecap(uid: string) {
+  const todosCompleted = db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) as n FROM todos
+       WHERE user_id = ? AND completed = 1 AND completed_at IS NOT NULL
+         AND substr(completed_at, 1, 10) >= date('now', '-7 days')`
+    )
+    .get(uid)!.n;
+
+  const workoutsLogged = db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) as n FROM workouts
+       WHERE user_id = ? AND substr(workout_date, 1, 10) >= date('now', '-7 days')`
+    )
+    .get(uid)!.n;
+
+  const bills = db
+    .query<{ n: number; total: number | null }, [string]>(
+      `SELECT COUNT(*) as n, SUM(amount_cents) as total FROM bills
+       WHERE user_id = ? AND last_paid_at IS NOT NULL
+         AND substr(last_paid_at, 1, 10) >= date('now', '-7 days')`
+    )
+    .get(uid)!;
+
+  const tasksCompleted = db
+    .query<{ n: number }, [string]>(
+      `SELECT COUNT(*) as n FROM recurring_tasks
+       WHERE user_id = ? AND last_completed_at IS NOT NULL
+         AND substr(last_completed_at, 1, 10) >= date('now', '-7 days')`
+    )
+    .get(uid)!.n;
+
+  return {
+    todosCompleted,
+    workoutsLogged,
+    billsPaid: bills.n,
+    billsPaidCents: bills.total ?? 0,
+    tasksCompleted,
+  };
+}
