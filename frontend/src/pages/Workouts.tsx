@@ -112,10 +112,7 @@ function StreakCalendar({
     <div className="card" style={{ marginBottom: 16 }}>
       <div className="row" style={{ justifyContent: "center", gap: 32, marginBottom: 16, flexWrap: "wrap" }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 32, fontWeight: 700, color: current > 0 ? "var(--success)" : "var(--text)" }}>
-            {current > 0 ? "🔥 " : ""}
-            {current}
-          </div>
+          <div style={{ fontSize: 32, fontWeight: 700, color: current > 0 ? "var(--success)" : "var(--text)" }}>{current}</div>
           <div className="text-dim" style={{ fontSize: 12 }}>
             Day streak
           </div>
@@ -317,20 +314,26 @@ function WorkoutsTab() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [exercises, selectedExerciseName, workoutDateById]);
 
-  // A day with an existing workout expands and scrolls to it (view what happened); an
-  // empty day just sets the log form's date and scrolls there instead (add something).
+  // Switches the whole tab's date context — the list below already reacts to quickDate
+  // and auto-expands whatever's there (see the effect above), so a day with an existing
+  // workout just needs a scroll into view; an empty day scrolls to the log form instead.
   function selectCalendarDay(dateStr: string) {
     setQuickDate(dateStr);
-    const match = workouts.find((w) => w.workout_date === dateStr);
-    if (match) {
-      setExpandedId(match.id);
-      document.getElementById(`workout-${match.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-    } else {
-      document.getElementById("workout-quick-add")?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
+    const hasWorkout = workouts.some((w) => w.workout_date === dateStr);
+    const targetId = hasWorkout ? "workout-day-list" : "workout-quick-add";
+    setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   const workoutDates = useMemo(() => new Set(workouts.map((w) => w.workout_date)), [workouts]);
+
+  // Only the selected day's workouts are listed below — a lifetime history isn't useful
+  // to scroll through day to day; the calendar above is what full history is for.
+  const dayWorkouts = useMemo(() => workouts.filter((w) => w.workout_date === quickDate), [workouts, quickDate]);
+
+  useEffect(() => {
+    setExpandedId(dayWorkouts.length > 0 ? dayWorkouts[0].id : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickDate, workouts]);
 
   return (
     <div>
@@ -449,13 +452,14 @@ function WorkoutsTab() {
         </div>
       )}
 
+      <div id="workout-day-list">
       {loading ? (
         <div className="empty-state">Loading…</div>
-      ) : workouts.length === 0 ? (
-        <div className="empty-state">No workouts logged yet — add one above.</div>
+      ) : dayWorkouts.length === 0 ? (
+        <div className="empty-state">No workouts logged for this day yet.</div>
       ) : (
         <div className="list">
-          {workouts.map((w) => (
+          {dayWorkouts.map((w) => (
             <WorkoutCard
               key={w.id}
               workout={w}
@@ -470,6 +474,7 @@ function WorkoutsTab() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

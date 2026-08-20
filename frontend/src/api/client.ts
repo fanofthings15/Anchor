@@ -336,6 +336,8 @@ export const api = {
   getWorkouts: () => request<{ workouts: Workout[]; exercises: WorkoutExercise[] }>("/workouts"),
   createWorkout: (data: { workout_date: string; name?: string; notes?: string }) =>
     request<Workout>("/workouts", { method: "POST", body: JSON.stringify(data) }),
+  updateWorkout: (id: string, data: Partial<Pick<Workout, "name" | "notes">>) =>
+    request<Workout>(`/workouts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteWorkout: (id: string) => request<{ ok: true }>(`/workouts/${id}`, { method: "DELETE" }),
   createWorkoutExercise: (
     workoutId: string,

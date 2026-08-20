@@ -72,6 +72,28 @@ workoutsRouter.post("/", (req, res) => {
   res.status(201).json(serializeWorkout(row));
 });
 
+workoutsRouter.patch("/:id", (req, res) => {
+  const existing = db
+    .query<WorkoutRow, [string, string]>("SELECT * FROM workouts WHERE id = ? AND user_id = ?")
+    .get(req.params.id, req.uid);
+  if (!existing) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  const { name, notes } = req.body ?? {};
+  const next = {
+    name: typeof name === "string" ? name : existing.name,
+    notes: typeof notes === "string" ? notes : existing.notes,
+  };
+  db.query("UPDATE workouts SET name = ?, notes = ? WHERE id = ? AND user_id = ?").run(
+    next.name,
+    next.notes,
+    req.params.id,
+    req.uid
+  );
+  res.json(serializeWorkout({ ...existing, ...next }));
+});
+
 workoutsRouter.delete("/:id", (req, res) => {
   db.query("DELETE FROM workout_exercises WHERE workout_id = ? AND user_id = ?").run(req.params.id, req.uid);
   db.query("DELETE FROM workouts WHERE id = ? AND user_id = ?").run(req.params.id, req.uid);
