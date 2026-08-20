@@ -61,6 +61,7 @@ export interface Todo {
   priority: Priority;
   completed: boolean;
   completed_at: string | null;
+  sort_order: number;
   created_at: string;
 }
 
@@ -199,6 +200,13 @@ export const api = {
   getTodos: () => request<{ lists: TodoList[]; todos: Todo[] }>("/todos"),
   createTodoList: (name: string) => request<TodoList>("/todos/lists", { method: "POST", body: JSON.stringify({ name }) }),
   deleteTodoList: (id: string) => request<{ ok: true }>(`/todos/lists/${id}`, { method: "DELETE" }),
+  reorderTodoLists: (orderedIds: string[]) =>
+    request<TodoList[]>("/todos/lists/reorder", { method: "PATCH", body: JSON.stringify({ ordered_ids: orderedIds }) }),
+  reorderTodos: (listId: string, orderedIds: string[]) =>
+    request<Todo[]>("/todos/reorder", {
+      method: "PATCH",
+      body: JSON.stringify({ list_id: listId, ordered_ids: orderedIds }),
+    }),
   createTodo: (data: { list_id: string; title: string; notes?: string; due_at?: string | null; priority?: Priority }) =>
     request<Todo>("/todos", { method: "POST", body: JSON.stringify(data) }),
   updateTodo: (id: string, data: Partial<Pick<Todo, "title" | "notes" | "due_at" | "priority" | "list_id">>) =>

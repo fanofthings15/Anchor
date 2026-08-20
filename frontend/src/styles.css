@@ -351,6 +351,16 @@ button {
   color: var(--text);
 }
 
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+  flex-shrink: 0;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
 .checkbox-btn {
   min-width: 28px;
   min-height: 28px;

@@ -1,5 +1,12 @@
 import type { Database } from "bun:sqlite";
 
+function tableColumns(db: Database, name: string): string[] {
+  return db
+    .query<{ name: string }, []>(`PRAGMA table_info(${name})`)
+    .all()
+    .map((c) => c.name);
+}
+
 /**
  * Schema for Anchor's multi-user data model. Every table (except none — there is no
  * shared/global data in this app) is scoped by `user_id`, resolved from Authentik's
@@ -45,6 +52,7 @@ CREATE TABLE IF NOT EXISTS todos (
   priority TEXT NOT NULL DEFAULT 'normal',
   completed INTEGER NOT NULL DEFAULT 0,
   completed_at TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_todos_user ON todos(user_id);
@@ -197,4 +205,17 @@ CREATE TABLE IF NOT EXISTS user_settings (
   theme TEXT NOT NULL DEFAULT 'dark'
 );
 `);
+
+  // sort_order was added to `todos` after the initial schema (drag-to-reorder within a
+  // list) — backfill it for any DB created before this column existed. No-ops on a fresh
+  // install, since the CREATE TABLE above already includes the column there.
+  if (!tableColumns(db, "todos").includes("sort_order")) {
+    db.exec("ALTER TABLE todos ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
+    db.exec(`
+      UPDATE todos SET sort_order = (
+        SELECT COUNT(*) FROM todos t2
+        WHERE t2.list_id = todos.list_id AND t2.user_id = todos.user_id AND t2.created_at < todos.created_at
+      )
+    `);
+  }
 }

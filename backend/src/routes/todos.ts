@@ -24,6 +24,7 @@ interface TodoRow {
   priority: string;
   completed: number;
   completed_at: string | null;
+  sort_order: number;
   created_at: string;
 }
 
@@ -46,6 +47,7 @@ function serializeTodo(row: TodoRow) {
     priority: row.priority as Priority,
     completed: row.completed === 1,
     completed_at: row.completed_at,
+    sort_order: row.sort_order,
     created_at: row.created_at,
   };
 }
@@ -56,9 +58,43 @@ todosRouter.get("/", (req, res) => {
     .query<TodoListRow, [string]>("SELECT * FROM todo_lists WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC")
     .all(req.uid);
   const todos = db
-    .query<TodoRow, [string]>("SELECT * FROM todos WHERE user_id = ? ORDER BY created_at ASC")
+    .query<TodoRow, [string]>("SELECT * FROM todos WHERE user_id = ? ORDER BY list_id ASC, sort_order ASC, created_at ASC")
     .all(req.uid);
   res.json({ lists: lists.map(serializeList), todos: todos.map(serializeTodo) });
+});
+
+// PATCH /api/todos/lists/reorder — persist a new list order (drag-and-drop)
+todosRouter.patch("/lists/reorder", (req, res) => {
+  const { ordered_ids } = req.body ?? {};
+  if (!Array.isArray(ordered_ids) || ordered_ids.some((id) => typeof id !== "string")) {
+    res.status(400).json({ error: "ordered_ids must be an array of list ids" });
+    return;
+  }
+  const update = db.query("UPDATE todo_lists SET sort_order = ? WHERE id = ? AND user_id = ?");
+  ordered_ids.forEach((id: string, index: number) => update.run(index, id, req.uid));
+  const lists = db
+    .query<TodoListRow, [string]>("SELECT * FROM todo_lists WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC")
+    .all(req.uid);
+  res.json(lists.map(serializeList));
+});
+
+// PATCH /api/todos/reorder — persist a new todo order within one list (drag-and-drop)
+todosRouter.patch("/reorder", (req, res) => {
+  const { list_id, ordered_ids } = req.body ?? {};
+  if (typeof list_id !== "string" || !list_id) {
+    res.status(400).json({ error: "list_id is required" });
+    return;
+  }
+  if (!Array.isArray(ordered_ids) || ordered_ids.some((id) => typeof id !== "string")) {
+    res.status(400).json({ error: "ordered_ids must be an array of todo ids" });
+    return;
+  }
+  const update = db.query("UPDATE todos SET sort_order = ? WHERE id = ? AND user_id = ? AND list_id = ?");
+  ordered_ids.forEach((id: string, index: number) => update.run(index, id, req.uid, list_id));
+  const todos = db
+    .query<TodoRow, [string, string]>("SELECT * FROM todos WHERE user_id = ? AND list_id = ? ORDER BY sort_order ASC")
+    .all(req.uid, list_id);
+  res.json(todos.map(serializeTodo));
 });
 
 // POST /api/todos/lists — create a new list
@@ -110,11 +146,15 @@ todosRouter.post("/", (req, res) => {
     res.status(404).json({ error: "list not found" });
     return;
   }
+  const countRow = db
+    .query<{ n: number }, [string, string]>("SELECT COUNT(*) as n FROM todos WHERE user_id = ? AND list_id = ?")
+    .get(req.uid, list_id);
+  const sortOrder = countRow?.n ?? 0;
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   db.query(
-    "INSERT INTO todos (id, user_id, list_id, title, notes, due_at, priority, completed, completed_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)"
-  ).run(id, req.uid, list_id, title.trim(), notes, due_at, priority, now);
+    "INSERT INTO todos (id, user_id, list_id, title, notes, due_at, priority, completed, completed_at, sort_order, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)"
+  ).run(id, req.uid, list_id, title.trim(), notes, due_at, priority, sortOrder, now);
   const row = db.query<TodoRow, [string]>("SELECT * FROM todos WHERE id = ?").get(id)!;
   res.status(201).json(serializeTodo(row));
 });
