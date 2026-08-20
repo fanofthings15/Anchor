@@ -19,7 +19,9 @@ import { settingsRouter } from "./routes/settings";
 import { todayRouter } from "./routes/today";
 
 const app = express();
-app.use(express.json());
+// Raised from Express's 100kb default so pasted note images (sent as base64 JSON, ~33%
+// larger than the raw file) fit — notes.ts separately caps the decoded image at 8MB.
+app.use(express.json({ limit: "12mb" }));
 
 // Exempt from currentUser: a container/orchestrator health check hits this directly,
 // not through Traefik+Authentik, so it never carries an X-authentik-uid header.

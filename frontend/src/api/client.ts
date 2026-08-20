@@ -46,6 +46,13 @@ export interface Note {
   updated_at: string;
 }
 
+export interface NoteImage {
+  id: string;
+  note_id: string;
+  mime_type: string;
+  created_at: string;
+}
+
 export interface TodoList {
   id: string;
   name: string;
@@ -233,11 +240,18 @@ export interface TodayResponse {
 export const api = {
   // Notes
   listNotes: () => request<Note[]>("/notes"),
+  getNote: (id: string) => request<Note>(`/notes/${id}`),
   createNote: (data: { title: string; body?: string; tags?: string[] }) =>
     request<Note>("/notes", { method: "POST", body: JSON.stringify(data) }),
   updateNote: (id: string, data: Partial<Pick<Note, "title" | "body" | "tags" | "pinned">>) =>
     request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteNote: (id: string) => request<{ ok: true }>(`/notes/${id}`, { method: "DELETE" }),
+
+  // Note images (pasted screenshots/photos attached to a note)
+  listNoteImages: (noteId: string) => request<NoteImage[]>(`/notes/${noteId}/images`),
+  uploadNoteImage: (noteId: string, dataUrl: string) =>
+    request<NoteImage>(`/notes/${noteId}/images`, { method: "POST", body: JSON.stringify({ data_url: dataUrl }) }),
+  deleteNoteImage: (id: string) => request<{ ok: true }>(`/notes/images/${id}`, { method: "DELETE" }),
 
   // Todos
   getTodos: () => request<{ lists: TodoList[]; todos: Todo[] }>("/todos"),

@@ -49,6 +49,15 @@ export default function Bills() {
   const [intervalDays, setIntervalDays] = useState("30");
   const [nextDueAt, setNextDueAt] = useState("");
 
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editAutopay, setEditAutopay] = useState(false);
+  const [editRecurrence, setEditRecurrence] = useState<Recurrence>("monthly");
+  const [editIntervalDays, setEditIntervalDays] = useState("30");
+  const [editNextDueAt, setEditNextDueAt] = useState("");
+
   useEffect(() => {
     load();
   }, []);
@@ -96,6 +105,39 @@ export default function Bills() {
   async function remove(id: string) {
     await api.deleteBill(id);
     setBills((prev) => prev.filter((b) => b.id !== id));
+  }
+
+  function startEdit(bill: Bill) {
+    setEditingId(bill.id);
+    setEditName(bill.name);
+    setEditAmount((bill.amount_cents / 100).toFixed(2));
+    setEditCategory(bill.category);
+    setEditAutopay(bill.autopay);
+    setEditRecurrence(bill.recurrence);
+    setEditIntervalDays(bill.recurrence_interval_days != null ? String(bill.recurrence_interval_days) : "30");
+    setEditNextDueAt(bill.next_due_at.slice(0, 10));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(e: React.FormEvent, id: string) {
+    e.preventDefault();
+    const trimmedName = editName.trim();
+    const dollars = Number(editAmount);
+    if (!trimmedName || !Number.isFinite(dollars) || !editNextDueAt) return;
+    const updated = await api.updateBill(id, {
+      name: trimmedName,
+      amount_cents: Math.round(dollars * 100),
+      category: editCategory.trim(),
+      autopay: editAutopay,
+      recurrence: editRecurrence,
+      recurrence_interval_days: editRecurrence === "custom" ? Number(editIntervalDays) || null : null,
+      next_due_at: new Date(editNextDueAt).toISOString(),
+    });
+    setBills((prev) => prev.map((b) => (b.id === id ? updated : b)).sort(sortBills));
+    setEditingId(null);
   }
 
   return (
@@ -176,6 +218,96 @@ export default function Bills() {
       ) : (
         <div className="list">
           {bills.map((bill) => {
+            if (editingId === bill.id) {
+              return (
+                <form className="card" key={bill.id} onSubmit={(e) => saveEdit(e, bill.id)}>
+                  <div className="field">
+                    <label htmlFor={`edit-bill-name-${bill.id}`}>Name</label>
+                    <input
+                      id={`edit-bill-name-${bill.id}`}
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-bill-amount-${bill.id}`}>Amount</label>
+                    <input
+                      id={`edit-bill-amount-${bill.id}`}
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-bill-category-${bill.id}`}>Category</label>
+                    <input
+                      id={`edit-bill-category-${bill.id}`}
+                      type="text"
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-bill-due-${bill.id}`}>Next due date</label>
+                    <input
+                      id={`edit-bill-due-${bill.id}`}
+                      type="date"
+                      value={editNextDueAt}
+                      onChange={(e) => setEditNextDueAt(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-bill-recurrence-${bill.id}`}>Recurrence</label>
+                    <select
+                      id={`edit-bill-recurrence-${bill.id}`}
+                      value={editRecurrence}
+                      onChange={(e) => setEditRecurrence(e.target.value as Recurrence)}
+                    >
+                      {RECURRENCE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {editRecurrence === "custom" && (
+                    <div className="field">
+                      <label htmlFor={`edit-bill-interval-${bill.id}`}>Repeat every (days)</label>
+                      <input
+                        id={`edit-bill-interval-${bill.id}`}
+                        type="number"
+                        inputMode="numeric"
+                        min="1"
+                        value={editIntervalDays}
+                        onChange={(e) => setEditIntervalDays(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="row">
+                    <input
+                      id={`edit-bill-autopay-${bill.id}`}
+                      type="checkbox"
+                      checked={editAutopay}
+                      onChange={(e) => setEditAutopay(e.target.checked)}
+                    />
+                    <label htmlFor={`edit-bill-autopay-${bill.id}`}>Autopay</label>
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" className="btn" onClick={cancelEdit}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      Save
+                    </button>
+                  </div>
+                </form>
+              );
+            }
+
             const paid = paidThisCycle(bill);
             const diff = daysUntil(bill.next_due_at);
             const overdue = !paid && diff < 0;
@@ -198,6 +330,9 @@ export default function Bills() {
                   <div className="row">
                     <button type="button" className="btn btn-primary" onClick={() => markPaid(bill.id)}>
                       Mark paid
+                    </button>
+                    <button type="button" className="btn-icon" onClick={() => startEdit(bill)} aria-label="Edit bill">
+                      ✎
                     </button>
                     <button type="button" className="btn-icon text-danger" onClick={() => remove(bill.id)} aria-label="Delete bill">
                       ✕

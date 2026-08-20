@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type Note } from "../api/client";
 
 export default function Notes() {
+  const navigate = useNavigate();
   const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [quickTitle, setQuickTitle] = useState("");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     load();
@@ -26,18 +27,11 @@ export default function Notes() {
     if (!title) return;
     setQuickTitle("");
     const note = await api.createNote({ title });
-    // A plain prepend would bury an existing pinned note under the new one — always
-    // re-sort after any mutation rather than assuming "newest" also means "top".
-    setNotes((prev) => [note, ...prev].sort(sortNotes));
+    navigate(`/notes/${note.id}`);
   }
 
   async function togglePin(note: Note) {
     const updated = await api.updateNote(note.id, { pinned: !note.pinned });
-    setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)).sort(sortNotes));
-  }
-
-  async function saveBody(note: Note, body: string) {
-    const updated = await api.updateNote(note.id, { body });
     setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)).sort(sortNotes));
   }
 
@@ -49,6 +43,11 @@ export default function Notes() {
   function sortNotes(a: Note, b: Note) {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
     return b.updated_at.localeCompare(a.updated_at);
+  }
+
+  function preview(body: string): string {
+    const trimmed = body.trim();
+    return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
   }
 
   return (
@@ -80,7 +79,7 @@ export default function Notes() {
                   type="button"
                   className="row"
                   style={{ background: "none", border: "none", padding: 0, flex: 1, textAlign: "left" }}
-                  onClick={() => setExpandedId(expandedId === note.id ? null : note.id)}
+                  onClick={() => navigate(`/notes/${note.id}`)}
                 >
                   {note.pinned && <span className="chip chip-accent">Pinned</span>}
                   <strong>{note.title}</strong>
@@ -92,13 +91,10 @@ export default function Notes() {
                   ✕
                 </button>
               </div>
-              {expandedId === note.id && (
-                <textarea
-                  defaultValue={note.body}
-                  placeholder="Write something…"
-                  onBlur={(e) => saveBody(note, e.target.value)}
-                  style={{ width: "100%", marginTop: 10 }}
-                />
+              {note.body.trim() && (
+                <div className="text-dim" style={{ marginTop: 6, fontSize: 13 }}>
+                  {preview(note.body)}
+                </div>
               )}
               {note.tags.length > 0 && (
                 <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>

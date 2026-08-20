@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id);
 
+-- Pasted images are stored as files under APP_DIR/uploads (see paths.ts), not as BLOBs
+-- here — this table just indexes them by note and carries enough metadata to serve them
+-- back with the right Content-Type.
+CREATE TABLE IF NOT EXISTS note_images (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  note_id TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_note_images_note ON note_images(note_id);
+
 CREATE TABLE IF NOT EXISTS todo_lists (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -226,8 +238,11 @@ CREATE TABLE IF NOT EXISTS user_settings (
   carbs_target_g REAL,
   fat_target_g REAL,
   goal_weight_lbs REAL,
+  api_token_hash TEXT,
+  api_token_created_at TEXT,
   theme TEXT NOT NULL DEFAULT 'dark'
 );
+CREATE INDEX IF NOT EXISTS idx_user_settings_api_token_hash ON user_settings(api_token_hash);
 
 CREATE TABLE IF NOT EXISTS saved_foods (
   id TEXT PRIMARY KEY,
@@ -314,6 +329,11 @@ CREATE TABLE IF NOT EXISTS migration_flags (
 
   if (!tableColumns(db, "user_settings").includes("goal_weight_lbs")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN goal_weight_lbs REAL");
+  }
+  if (!tableColumns(db, "user_settings").includes("api_token_hash")) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN api_token_hash TEXT");
+    db.exec("ALTER TABLE user_settings ADD COLUMN api_token_created_at TEXT");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_user_settings_api_token_hash ON user_settings(api_token_hash)");
   }
 
   // The first shipped version of the distance-parsing regex (`/mi/` with no boundary)

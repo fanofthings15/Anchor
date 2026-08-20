@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 import Nav from "./components/Nav";
 import Today from "./pages/Today";
 import Notes from "./pages/Notes";
+import NoteEditor from "./pages/NoteEditor";
 import Todos from "./pages/Todos";
 import Cleaning from "./pages/Cleaning";
 import Shopping from "./pages/Shopping";
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Today />} />
           <Route path="/notes" element={<Notes />} />
+          <Route path="/notes/:id" element={<NoteEditor />} />
           <Route path="/todos" element={<Todos />} />
           <Route path="/cleaning" element={<Cleaning />} />
           <Route path="/shopping" element={<Shopping />} />
