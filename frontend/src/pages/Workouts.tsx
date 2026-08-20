@@ -22,27 +22,10 @@ import {
   type WorkoutRoutine,
   type WorkoutRoutineExercise,
 } from "../api/client";
-import { buildMonthGrid, sameDay } from "../calendarUtils";
+import { addDaysISO, buildMonthGrid, computeStreaks, sameDay, todayISO } from "../calendarUtils";
 
 type Tab = "workouts" | "food" | "weight";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-// Local calendar date, not UTC — must match how workoutIdsByDay/computeStreaks below
-// parse and compare "today" (both via local Date components), or a workout logged for
-// "today" near midnight in a non-UTC timezone could land a day off from what the streak
-// calculator considers today, silently breaking the streak. Same convention Calendar.tsx
-// already uses for its own date-input defaults.
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function addDaysISO(iso: string, days: number): string {
-  const [y, m, day] = iso.split("-").map(Number);
-  const d = new Date(y, m - 1, day);
-  d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -51,35 +34,6 @@ function shortDate(iso: string): string {
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10;
-}
-
-function diffDays(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
-// Current streak counts backward from today (or from yesterday, if today just hasn't
-// happened yet — a rest day so far this morning shouldn't zero out an otherwise-live
-// streak). Longest streak scans the full history for the best run, independent of today.
-function computeStreaks(workoutDates: Set<string>): { current: number; longest: number } {
-  if (workoutDates.size === 0) return { current: 0, longest: 0 };
-  const sorted = [...workoutDates].map((s) => new Date(s)).sort((a, b) => a.getTime() - b.getTime());
-  let longest = 0;
-  let run = 0;
-  let prev: Date | null = null;
-  for (const d of sorted) {
-    run = prev && diffDays(prev, d) === 1 ? run + 1 : 1;
-    longest = Math.max(longest, run);
-    prev = d;
-  }
-
-  let current = 0;
-  const cursor = new Date();
-  if (!workoutDates.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
-  while (workoutDates.has(cursor.toDateString())) {
-    current += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-  return { current, longest };
 }
 
 const tooltipStyle = {
@@ -139,7 +93,7 @@ function WorkoutCalendar({
     return map;
   }, [workouts]);
 
-  const { current, longest } = useMemo(() => computeStreaks(new Set(workoutIdsByDay.keys())), [workoutIdsByDay]);
+  const { current, longest } = useMemo(() => computeStreaks(new Set(workouts.map((w) => w.workout_date))), [workouts]);
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -750,6 +704,7 @@ function FoodTab() {
   const [selectedDate, setSelectedDate] = useState(() => todayISO());
   const [trendMeals, setTrendMeals] = useState<Meal[]>([]);
   const [selectedDayMeals, setSelectedDayMeals] = useState<Meal[]>([]);
+  const [mealDates, setMealDates] = useState<string[]>([]);
   const [savedFoods, setSavedFoods] = useState<SavedFood[]>([]);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -779,17 +734,26 @@ function FoodTab() {
   async function load() {
     setLoading(true);
     try {
-      const [mealList, userSettings, foods] = await Promise.all([
+      const [mealList, userSettings, foods, dates] = await Promise.all([
         api.listMeals(rangeStart, rangeEnd),
         api.getSettings(),
         api.listSavedFoods(),
+        api.listMealDates(),
       ]);
       setTrendMeals(mealList);
       setSettings(userSettings);
       setSavedFoods(foods);
+      setMealDates(dates);
     } finally {
       setLoading(false);
     }
+  }
+
+  // Refetched (rather than patched locally) after any add/remove — the streak only cares
+  // about distinct days, and correctly dropping a day when its last meal is deleted needs
+  // knowing whether any other meal still exists on that date.
+  function refreshMealDates() {
+    api.listMealDates().then(setMealDates);
   }
 
   async function loadSelectedDay() {
@@ -822,6 +786,7 @@ function FoodTab() {
     const meal = await api.createMeal({ meal_date: selectedDate, name: trimmed, ...data });
     setSelectedDayMeals((prev) => [meal, ...prev]);
     refreshTrendIfInRange(selectedDate);
+    refreshMealDates();
     if (saveAsFood) {
       const food = await api.createSavedFood({ name: trimmed, ...data });
       setSavedFoods((prev) => [...prev, food].sort((a, b) => a.name.localeCompare(b.name)));
@@ -845,6 +810,7 @@ function FoodTab() {
     });
     setSelectedDayMeals((prev) => [meal, ...prev]);
     refreshTrendIfInRange(selectedDate);
+    refreshMealDates();
   }
 
   async function removeSavedFood(id: string) {
@@ -856,7 +822,10 @@ function FoodTab() {
     await api.deleteMeal(id);
     setSelectedDayMeals((prev) => prev.filter((m) => m.id !== id));
     refreshTrendIfInRange(selectedDate);
+    refreshMealDates();
   }
+
+  const foodStreak = useMemo(() => computeStreaks(new Set(mealDates)), [mealDates]);
 
   const dayMeals = useMemo(
     () => [...selectedDayMeals].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -890,6 +859,13 @@ function FoodTab() {
 
   return (
     <div>
+      {foodStreak.current > 0 && (
+        <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+          <span className="chip chip-accent">🔥 {foodStreak.current} day food streak</span>
+          {foodStreak.longest > foodStreak.current && <span className="chip">Longest: {foodStreak.longest}</span>}
+        </div>
+      )}
+
       <div className="field">
         <label htmlFor="meal-date">Date</label>
         <input id="meal-date" type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />

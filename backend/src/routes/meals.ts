@@ -53,6 +53,17 @@ function serializeSavedFood(row: SavedFoodRow) {
   };
 }
 
+// GET /api/meals/dates — every distinct day the user has logged a meal, for a food streak
+// (computed client-side against local "today", same reasoning as workout streaks — see
+// calendarUtils.ts). Deliberately returns just dates, not full meal rows, since a streak
+// only needs to know which days happened, however large the real history gets.
+mealsRouter.get("/dates", (req, res) => {
+  const rows = db
+    .query<{ meal_date: string }, [string]>("SELECT DISTINCT meal_date FROM meals WHERE user_id = ?")
+    .all(req.uid);
+  res.json(rows.map((r) => r.meal_date));
+});
+
 // GET /api/meals/saved — the user's saved/frequent foods, for one-tap re-logging.
 // Registered before the "/:id"-shaped routes below would exist... there are none here,
 // but kept grouped at the top for clarity.

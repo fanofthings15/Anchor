@@ -27,3 +27,55 @@ export function buildMonthGrid(year: number, month: number): DayCell[][] {
 export function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
+
+function fmtLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Local calendar date, not UTC. Every "did I do X today" check (workout streaks, food
+// streaks, the Today page's log-reminders) must use this same local-date convention as
+// how workout_date/meal_date get written — a UTC-based date string can land on the wrong
+// side of midnight versus the browser's local "today" and silently miscount a streak or
+// misfire a reminder. See Workouts.tsx's original todayISO() bug for the concrete case
+// this fixed (a workout logged for "today" failed to register as extending the streak).
+export function todayISO(): string {
+  return fmtLocal(new Date());
+}
+
+export function addDaysISO(iso: string, days: number): string {
+  const [y, m, day] = iso.split("-").map(Number);
+  const d = new Date(y, m - 1, day);
+  d.setDate(d.getDate() + days);
+  return fmtLocal(d);
+}
+
+function diffDays(a: Date, b: Date): number {
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+// Current streak counts backward from today (or from yesterday, if today just hasn't
+// happened yet — logging nothing so far this morning shouldn't zero out an otherwise-live
+// streak). Longest streak scans the full history for the best run, independent of today.
+// `dates` is any set of "YYYY-MM-DD" strings — workout_date, meal_date, whatever the
+// caller is tracking a streak over.
+export function computeStreaks(dates: Set<string>): { current: number; longest: number } {
+  if (dates.size === 0) return { current: 0, longest: 0 };
+  const sorted = [...dates].map((s) => new Date(`${s}T00:00:00`)).sort((a, b) => a.getTime() - b.getTime());
+  let longest = 0;
+  let run = 0;
+  let prev: Date | null = null;
+  for (const d of sorted) {
+    run = prev && diffDays(prev, d) === 1 ? run + 1 : 1;
+    longest = Math.max(longest, run);
+    prev = d;
+  }
+
+  let current = 0;
+  const cursor = new Date();
+  if (!dates.has(fmtLocal(cursor))) cursor.setDate(cursor.getDate() - 1);
+  while (dates.has(fmtLocal(cursor))) {
+    current += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return { current, longest };
+}

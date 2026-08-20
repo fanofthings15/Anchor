@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, type Bill, type CalendarEvent, type RecurringTask, type Todo } from "../api/client";
+import { todayISO } from "../calendarUtils";
 
+// UTC-based — matches how todos/bills/recurring-task dates are stored (full ISO
+// timestamps via toISOString()) and how the backend's /api/today aggregation decides
+// what counts as due, so this has to stay on the same UTC basis as those, not the local
+// calendar-date basis workout_date/meal_date use (see todayISO() in calendarUtils.ts,
+// used further below only for the separate food/workout logged-today check).
 function todayDateStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -26,6 +33,8 @@ export default function Today() {
   const [billsDue, setBillsDue] = useState<Bill[]>([]);
   const [tasksDue, setTasksDue] = useState<RecurringTask[]>([]);
   const [eventsToday, setEventsToday] = useState<CalendarEvent[]>([]);
+  const [loggedFoodToday, setLoggedFoodToday] = useState(true);
+  const [loggedWorkoutToday, setLoggedWorkoutToday] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,11 +44,14 @@ export default function Today() {
   async function load() {
     setLoading(true);
     try {
-      const data = await api.getToday();
+      const [data, mealDates, workoutData] = await Promise.all([api.getToday(), api.listMealDates(), api.getWorkouts()]);
       setTodosDue(data.todosDue);
       setBillsDue(data.billsDue);
       setTasksDue(data.tasksDue);
       setEventsToday(data.eventsToday);
+      const today = todayISO();
+      setLoggedFoodToday(mealDates.includes(today));
+      setLoggedWorkoutToday(workoutData.workouts.some((w) => w.workout_date === today));
     } finally {
       setLoading(false);
     }
@@ -73,7 +85,13 @@ export default function Today() {
   }
 
   const nothingDue =
-    !loading && todosDue.length === 0 && billsDue.length === 0 && tasksDue.length === 0 && eventsToday.length === 0;
+    !loading &&
+    todosDue.length === 0 &&
+    billsDue.length === 0 &&
+    tasksDue.length === 0 &&
+    eventsToday.length === 0 &&
+    loggedFoodToday &&
+    loggedWorkoutToday;
 
   return (
     <div>
@@ -85,6 +103,30 @@ export default function Today() {
         <div className="empty-state">Nothing due — you're all caught up.</div>
       ) : (
         <>
+          {(!loggedFoodToday || !loggedWorkoutToday) && (
+            <section>
+              <h2>Log Today</h2>
+              <div className="list">
+                {!loggedFoodToday && (
+                  <div className="card row-between">
+                    <span>🍽 No food logged today</span>
+                    <Link to="/workouts" className="btn btn-primary">
+                      Log food
+                    </Link>
+                  </div>
+                )}
+                {!loggedWorkoutToday && (
+                  <div className="card row-between">
+                    <span>💪 No workout logged today</span>
+                    <Link to="/workouts" className="btn">
+                      Log workout
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {todosDue.length > 0 && (
             <section>
               <h2>Due Today</h2>

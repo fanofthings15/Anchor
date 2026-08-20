@@ -365,6 +365,9 @@ export const api = {
   }) => request<Meal>("/meals", { method: "POST", body: JSON.stringify(data) }),
   deleteMeal: (id: string) => request<{ ok: true }>(`/meals/${id}`, { method: "DELETE" }),
 
+  // Every distinct day a meal was logged — for the food streak.
+  listMealDates: () => request<string[]>("/meals/dates"),
+
   // Saved foods — for one-tap re-logging of things eaten often
   listSavedFoods: () => request<SavedFood[]>("/meals/saved"),
   createSavedFood: (data: { name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }) =>
