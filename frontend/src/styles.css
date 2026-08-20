@@ -599,3 +599,76 @@ button {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+
+/* Hevy-style per-set logging table: Set / Previous / Lbs / Reps / done-checkbox / delete.
+   A fixed grid rather than flex so every row's columns line up exactly, which matters
+   more here than almost anywhere else in the app — this is a dense data-entry table,
+   not a card list. */
+.sets-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 56px 56px 32px 24px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.set-row:last-child {
+  border-bottom: none;
+}
+
+.set-row-header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding-bottom: 8px;
+}
+
+.set-row-index {
+  text-align: center;
+  font-weight: 600;
+}
+
+.set-row-previous {
+  font-size: 13px;
+  text-align: center;
+}
+
+.set-input {
+  min-height: 40px;
+  padding: 6px 2px;
+  text-align: center;
+  /* font-size must stay >= 16px (see the global input rule) to avoid iOS's
+     auto-zoom-on-focus — do not shrink this further even though the column is narrow. */
+}
+
+/* Hide the native up/down spinner — in a 56px-wide column it eats enough space to
+   visually clip a 3-digit value (e.g. "135" rendering as "13"). */
+.set-input::-webkit-outer-spin-button,
+.set-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.set-input {
+  -moz-appearance: textfield;
+}
+
+.set-row-delete {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 13px;
+  min-height: 32px;
+  min-width: 24px;
+  padding: 0;
+}
+
+.set-row-delete:active {
+  color: var(--danger);
+}

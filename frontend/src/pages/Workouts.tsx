@@ -22,6 +22,7 @@ import {
   type WorkoutExercise,
   type WorkoutRoutine,
   type WorkoutRoutineExercise,
+  type WorkoutSet,
 } from "../api/client";
 import { addDaysISO, buildMonthGrid, computeStreaks, sameDay, todayISO } from "../calendarUtils";
 
@@ -167,6 +168,7 @@ function StreakCalendar({
 function WorkoutsTab() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exercises, setExercises] = useState<WorkoutExercise[]>([]);
+  const [sets, setSets] = useState<WorkoutSet[]>([]);
   const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
   const [routineExercises, setRoutineExercises] = useState<WorkoutRoutineExercise[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,11 +190,41 @@ function WorkoutsTab() {
       const [workoutData, routineData] = await Promise.all([api.getWorkouts(), api.getRoutines()]);
       setWorkouts(workoutData.workouts);
       setExercises(workoutData.exercises);
+      setSets(workoutData.sets);
       setRoutines(routineData.routines);
       setRoutineExercises(routineData.exercises);
     } finally {
       setLoading(false);
     }
+  }
+
+  const workoutDateById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const w of workouts) m.set(w.id, w.workout_date);
+    return m;
+  }, [workouts]);
+
+  // Every past instance of "this exercise name", oldest first, so the per-set table can
+  // show what was actually done last time (Hevy's "Previous" column) — the whole point
+  // of logging sets individually rather than one aggregate number per exercise.
+  const exerciseHistoryByName = useMemo(() => {
+    const map = new Map<string, { workoutId: string; date: string; sets: WorkoutSet[] }[]>();
+    for (const ex of exercises) {
+      const key = ex.name.trim().toLowerCase();
+      if (!key) continue;
+      const exSets = sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index);
+      const date = workoutDateById.get(ex.workout_id) ?? "";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push({ workoutId: ex.workout_id, date, sets: exSets });
+    }
+    for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date));
+    return map;
+  }, [exercises, sets, workoutDateById]);
+
+  function getPreviousSets(exerciseName: string, currentWorkoutId: string): WorkoutSet[] {
+    const history = exerciseHistoryByName.get(exerciseName.trim().toLowerCase()) ?? [];
+    const others = history.filter((h) => h.workoutId !== currentWorkoutId);
+    return others.length > 0 ? others[others.length - 1].sets : [];
   }
 
   async function quickAdd(e: React.FormEvent) {
@@ -205,7 +237,9 @@ function WorkoutsTab() {
   }
 
   // Applies a saved routine to a brand-new workout — creates the workout, then bulk-adds
-  // every exercise from the routine template so nothing needs retyping.
+  // every exercise from the routine template with that many sets pre-filled from the
+  // template's target weight/reps (unchecked — matches Hevy's "start routine" behavior:
+  // the sets are ready to confirm/edit, not already marked done).
   async function startFromRoutine(e: React.FormEvent) {
     e.preventDefault();
     if (!quickDate || !startRoutineId) return;
@@ -216,49 +250,97 @@ function WorkoutsTab() {
     const templateExercises = routineExercises
       .filter((ex) => ex.routine_id === startRoutineId)
       .sort((a, b) => a.sort_order - b.sort_order);
-    const created = await Promise.all(
-      templateExercises.map((ex) =>
-        api.createWorkoutExercise(workout.id, {
-          name: ex.name,
-          sets: ex.sets ?? undefined,
-          reps: ex.reps ?? undefined,
-          weight: ex.weight ?? undefined,
-        })
-      )
-    );
-    setExercises((prev) => [...prev, ...created]);
+
+    const newExercises: WorkoutExercise[] = [];
+    const newSets: WorkoutSet[] = [];
+    for (const tmpl of templateExercises) {
+      const exercise = await api.createWorkoutExercise(workout.id, { name: tmpl.name });
+      newExercises.push(exercise);
+      const count = tmpl.sets && tmpl.sets > 0 ? tmpl.sets : 1;
+      for (let i = 0; i < count; i++) {
+        const set = await api.createWorkoutSet(exercise.id, {
+          weight: tmpl.weight ?? undefined,
+          reps: tmpl.reps ?? undefined,
+          completed: false,
+        });
+        newSets.push(set);
+      }
+    }
+    setExercises((prev) => [...prev, ...newExercises]);
+    setSets((prev) => [...prev, ...newSets]);
     setExpandedId(workout.id);
   }
 
   async function remove(id: string) {
+    const exerciseIds = new Set(exercises.filter((ex) => ex.workout_id === id).map((ex) => ex.id));
     await api.deleteWorkout(id);
     setWorkouts((prev) => prev.filter((w) => w.id !== id));
     setExercises((prev) => prev.filter((ex) => ex.workout_id !== id));
+    setSets((prev) => prev.filter((s) => !exerciseIds.has(s.exercise_id)));
   }
 
-  async function addExercise(workoutId: string, data: { name: string; sets?: number; reps?: number; weight?: number }) {
-    const exercise = await api.createWorkoutExercise(workoutId, data);
+  // Adding an exercise also seeds it with one set, pre-filled from the last time this
+  // exercise was logged (if ever) — an empty exercise with no sets to fill in isn't a
+  // useful starting point, and this is what Hevy actually does too.
+  async function addExercise(workoutId: string, name: string) {
+    const exercise = await api.createWorkoutExercise(workoutId, { name });
     setExercises((prev) => [...prev, exercise]);
+    const previous = getPreviousSets(name, workoutId)[0];
+    const set = await api.createWorkoutSet(exercise.id, {
+      weight: previous?.weight ?? undefined,
+      reps: previous?.reps ?? undefined,
+      completed: false,
+    });
+    setSets((prev) => [...prev, set]);
   }
 
   async function removeExercise(id: string) {
     await api.deleteWorkoutExercise(id);
     setExercises((prev) => prev.filter((ex) => ex.id !== id));
+    setSets((prev) => prev.filter((s) => s.exercise_id !== id));
   }
 
+  async function addSet(exerciseId: string, weight: number | null, reps: number | null) {
+    const set = await api.createWorkoutSet(exerciseId, { weight: weight ?? undefined, reps: reps ?? undefined, completed: false });
+    setSets((prev) => [...prev, set]);
+  }
+
+  async function updateSet(id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) {
+    setSets((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
+    try {
+      await api.updateWorkoutSet(id, data);
+    } catch {
+      load();
+    }
+  }
+
+  async function deleteSet(id: string) {
+    await api.deleteWorkoutSet(id);
+    setSets((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  // Routine templates still keep one aggregate sets/reps/weight per exercise (they're a
+  // target plan, not a logged performance) — summarized from the workout's real sets: set
+  // count as-is, and the top (heaviest) set's weight/reps as the target, same heuristic
+  // the CSV import used.
   async function saveAsRoutine(workoutId: string, name: string) {
     const routine = await api.createRoutine(name);
     setRoutines((prev) => [...prev, routine].sort((a, b) => a.name.localeCompare(b.name)));
     const workoutExercises = exercises.filter((ex) => ex.workout_id === workoutId).sort((a, b) => a.sort_order - b.sort_order);
     const created = await Promise.all(
-      workoutExercises.map((ex) =>
-        api.createRoutineExercise(routine.id, {
+      workoutExercises.map((ex) => {
+        const exSets = sets.filter((s) => s.exercise_id === ex.id);
+        const top = exSets.reduce<WorkoutSet | null>(
+          (best, s) => (s.weight != null && (best?.weight ?? -Infinity) < s.weight ? s : best),
+          null
+        );
+        return api.createRoutineExercise(routine.id, {
           name: ex.name,
-          sets: ex.sets ?? undefined,
-          reps: ex.reps ?? undefined,
-          weight: ex.weight ?? undefined,
-        })
-      )
+          sets: exSets.length || undefined,
+          reps: top?.reps ?? undefined,
+          weight: top?.weight ?? undefined,
+        });
+      })
     );
     setRoutineExercises((prev) => [...prev, ...created]);
   }
@@ -298,21 +380,24 @@ function WorkoutsTab() {
     return Array.from(names.values()).sort((a, b) => a.localeCompare(b));
   }, [exercises]);
 
-  const workoutDateById = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const w of workouts) m.set(w.id, w.workout_date);
-    return m;
-  }, [workouts]);
-
+  // Plots the heaviest set logged for this exercise on each date it appears — a per-set
+  // model has no single "the" weight for a given day, so the top set is the meaningful
+  // number for a progress trend (same heuristic used everywhere else this app collapses
+  // multiple sets into one representative value).
   const progressData = useMemo(() => {
     if (!selectedExerciseName) return [];
     const key = selectedExerciseName.toLowerCase();
-    return exercises
-      .filter((ex) => ex.name.trim().toLowerCase() === key && ex.weight != null)
-      .map((ex) => ({ date: workoutDateById.get(ex.workout_id) ?? "", weight: ex.weight as number }))
-      .filter((p) => p.date)
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [exercises, selectedExerciseName, workoutDateById]);
+    const points: { date: string; weight: number }[] = [];
+    for (const ex of exercises) {
+      if (ex.name.trim().toLowerCase() !== key) continue;
+      const date = workoutDateById.get(ex.workout_id);
+      if (!date) continue;
+      const weights = sets.filter((s) => s.exercise_id === ex.id && s.weight != null).map((s) => s.weight as number);
+      if (weights.length === 0) continue;
+      points.push({ date, weight: Math.max(...weights) });
+    }
+    return points.sort((a, b) => a.date.localeCompare(b.date));
+  }, [exercises, sets, selectedExerciseName, workoutDateById]);
 
   // Switches the whole tab's date context — the list below already reacts to quickDate
   // and auto-expands whatever's there (see the effect above), so a day with an existing
@@ -464,11 +549,16 @@ function WorkoutsTab() {
               key={w.id}
               workout={w}
               exercises={exercises.filter((ex) => ex.workout_id === w.id).sort((a, b) => a.sort_order - b.sort_order)}
+              sets={sets}
+              getPreviousSets={(exerciseName) => getPreviousSets(exerciseName, w.id)}
               expanded={expandedId === w.id}
               onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)}
               onDelete={() => remove(w.id)}
-              onAddExercise={(data) => addExercise(w.id, data)}
+              onAddExercise={(name) => addExercise(w.id, name)}
               onDeleteExercise={removeExercise}
+              onAddSet={addSet}
+              onUpdateSet={updateSet}
+              onDeleteSet={deleteSet}
               onSaveAsRoutine={(name) => saveAsRoutine(w.id, name)}
             />
           ))}
@@ -583,46 +673,179 @@ function RoutineCard({
   );
 }
 
+// One row of the Hevy-style Set / Previous / Lbs / Reps / done table. Weight and reps
+// are uncontrolled (defaultValue + onBlur) rather than controlled-on-every-keystroke —
+// with a real PATCH round-trip per change, committing on blur avoids firing a request
+// per keystroke while typing a number.
+function SetRow({
+  index,
+  set,
+  previous,
+  onUpdate,
+  onDelete,
+}: {
+  index: number;
+  set: WorkoutSet;
+  previous: WorkoutSet | undefined;
+  onUpdate: (data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="set-row">
+      <span className="set-row-index">{index + 1}</span>
+      <span className="set-row-previous text-dim">
+        {previous && (previous.weight != null || previous.reps != null)
+          ? `${previous.weight ?? "-"}x${previous.reps ?? "-"}`
+          : "-"}
+      </span>
+      <input
+        type="number"
+        className="set-input"
+        inputMode="decimal"
+        defaultValue={set.weight ?? ""}
+        placeholder="-"
+        onBlur={(e) => {
+          const v = e.target.value.trim();
+          const next = v ? Number(v) : null;
+          if (next !== set.weight) onUpdate({ weight: next });
+        }}
+        aria-label={`Set ${index + 1} weight`}
+      />
+      <input
+        type="number"
+        className="set-input"
+        inputMode="numeric"
+        defaultValue={set.reps ?? ""}
+        placeholder="-"
+        onBlur={(e) => {
+          const v = e.target.value.trim();
+          const next = v ? Number(v) : null;
+          if (next !== set.reps) onUpdate({ reps: next });
+        }}
+        aria-label={`Set ${index + 1} reps`}
+      />
+      <button
+        type="button"
+        className={`checkbox-btn${set.completed ? " checked" : ""}`}
+        onClick={() => onUpdate({ completed: !set.completed })}
+        aria-label={`Mark set ${index + 1} ${set.completed ? "not done" : "done"}`}
+      />
+      <button type="button" className="set-row-delete" onClick={onDelete} aria-label={`Delete set ${index + 1}`}>
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function ExerciseBlock({
+  exercise,
+  sets,
+  previousSets,
+  onDelete,
+  onAddSet,
+  onUpdateSet,
+  onDeleteSet,
+}: {
+  exercise: WorkoutExercise;
+  sets: WorkoutSet[];
+  previousSets: WorkoutSet[];
+  onDelete: () => void;
+  onAddSet: (weight: number | null, reps: number | null) => void;
+  onUpdateSet: (id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) => void;
+  onDeleteSet: (id: string) => void;
+}) {
+  // A new set starts from whatever the last set in this exercise already has — if this
+  // is the very first set, it falls back to the same slot from the previous time this
+  // exercise was logged, so a familiar exercise never starts from a blank row.
+  function handleAddSet() {
+    const last = sets[sets.length - 1];
+    const prev = previousSets[sets.length];
+    onAddSet(last?.weight ?? prev?.weight ?? null, last?.reps ?? prev?.reps ?? null);
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 10 }}>
+      <div className="row-between" style={{ marginBottom: sets.length > 0 ? 10 : 0 }}>
+        <strong>{exercise.name}</strong>
+        <button type="button" className="btn-icon text-danger" onClick={onDelete} aria-label={`Delete ${exercise.name}`}>
+          ✕
+        </button>
+      </div>
+
+      {sets.length > 0 && (
+        <div className="sets-table">
+          <div className="set-row set-row-header text-dim">
+            <span>Set</span>
+            <span>Previous</span>
+            <span>Lbs</span>
+            <span>Reps</span>
+            <span />
+            <span />
+          </div>
+          {sets.map((s, i) => (
+            <SetRow
+              key={s.id}
+              index={i}
+              set={s}
+              previous={previousSets[i]}
+              onUpdate={(data) => onUpdateSet(s.id, data)}
+              onDelete={() => onDeleteSet(s.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      <button type="button" className="btn" style={{ width: "100%", marginTop: 10 }} onClick={handleAddSet}>
+        + Add Set
+      </button>
+    </div>
+  );
+}
+
 function WorkoutCard({
   workout,
   exercises,
+  sets,
+  getPreviousSets,
   expanded,
   onToggle,
   onDelete,
   onAddExercise,
   onDeleteExercise,
+  onAddSet,
+  onUpdateSet,
+  onDeleteSet,
   onSaveAsRoutine,
 }: {
   workout: Workout;
   exercises: WorkoutExercise[];
+  sets: WorkoutSet[];
+  getPreviousSets: (exerciseName: string) => WorkoutSet[];
   expanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
-  onAddExercise: (data: { name: string; sets?: number; reps?: number; weight?: number }) => void;
+  onAddExercise: (name: string) => void;
   onDeleteExercise: (id: string) => void;
+  onAddSet: (exerciseId: string, weight: number | null, reps: number | null) => void;
+  onUpdateSet: (id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) => void;
+  onDeleteSet: (id: string) => void;
   onSaveAsRoutine: (name: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [sets, setSets] = useState("");
-  const [reps, setReps] = useState("");
-  const [weight, setWeight] = useState("");
   const [savingRoutine, setSavingRoutine] = useState(false);
   const [routineName, setRoutineName] = useState("");
+
+  const exerciseIds = new Set(exercises.map((ex) => ex.id));
+  const workoutSets = sets.filter((s) => exerciseIds.has(s.exercise_id));
+  const totalSets = workoutSets.length;
+  const volume = workoutSets.reduce((sum, s) => sum + (s.weight != null && s.reps != null ? s.weight * s.reps : 0), 0);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed) return;
-    onAddExercise({
-      name: trimmed,
-      sets: sets ? Number(sets) : undefined,
-      reps: reps ? Number(reps) : undefined,
-      weight: weight ? Number(weight) : undefined,
-    });
+    onAddExercise(trimmed);
     setName("");
-    setSets("");
-    setReps("");
-    setWeight("");
   }
 
   function openSaveAsRoutine() {
@@ -654,48 +877,49 @@ function WorkoutCard({
           ✕
         </button>
       </div>
+
       {expanded && (
         <div style={{ marginTop: 10 }}>
-          {exercises.length === 0 ? (
-            <div className="empty-state">No exercises yet.</div>
-          ) : (
-            <div className="list">
-              {exercises.map((ex) => (
-                <div className="row-between" key={ex.id}>
-                  <div className="row" style={{ flexWrap: "wrap" }}>
-                    <strong>{ex.name}</strong>
-                    {ex.sets != null && <span className="chip">{ex.sets} sets</span>}
-                    {ex.reps != null && <span className="chip">{ex.reps} reps</span>}
-                    {ex.weight != null && <span className="chip">{ex.weight} lb</span>}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-icon text-danger"
-                    onClick={() => onDeleteExercise(ex.id)}
-                    aria-label="Delete exercise"
-                  >
-                    ✕
-                  </button>
+          {totalSets > 0 && (
+            <div className="row" style={{ gap: 24, marginBottom: 14 }}>
+              <div>
+                <div style={{ fontWeight: 700 }}>{Math.round(volume).toLocaleString()} lbs</div>
+                <div className="text-dim" style={{ fontSize: 12 }}>
+                  Volume
                 </div>
-              ))}
+              </div>
+              <div>
+                <div style={{ fontWeight: 700 }}>{totalSets}</div>
+                <div className="text-dim" style={{ fontSize: 12 }}>
+                  Sets
+                </div>
+              </div>
             </div>
           )}
-          <form className="row" style={{ flexWrap: "wrap", marginTop: 10, gap: 8 }} onSubmit={submit}>
+
+          {exercises.length === 0 ? (
+            <div className="empty-state">No exercises yet — add one below.</div>
+          ) : (
+            exercises.map((ex) => (
+              <ExerciseBlock
+                key={ex.id}
+                exercise={ex}
+                sets={sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index)}
+                previousSets={getPreviousSets(ex.name)}
+                onDelete={() => onDeleteExercise(ex.id)}
+                onAddSet={(weight, reps) => onAddSet(ex.id, weight, reps)}
+                onUpdateSet={onUpdateSet}
+                onDeleteSet={onDeleteSet}
+              />
+            ))
+          )}
+
+          <form className="quick-add" onSubmit={submit}>
             <input
               type="text"
               placeholder="Exercise name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{ flex: "1 1 140px" }}
-            />
-            <input type="number" placeholder="Sets" value={sets} onChange={(e) => setSets(e.target.value)} style={{ width: 72 }} />
-            <input type="number" placeholder="Reps" value={reps} onChange={(e) => setReps(e.target.value)} style={{ width: 72 }} />
-            <input
-              type="number"
-              placeholder="Weight"
-              value={weight}
-              onChange={(e) => setWeight(e.target.value)}
-              style={{ width: 84 }}
             />
             <button className="btn btn-primary" type="submit">
               Add

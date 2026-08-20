@@ -153,11 +153,16 @@ export interface WorkoutExercise {
   id: string;
   workout_id: string;
   name: string;
-  sets: number | null;
-  reps: number | null;
-  weight: number | null;
   notes: string;
   sort_order: number;
+}
+export interface WorkoutSet {
+  id: string;
+  exercise_id: string;
+  set_index: number;
+  weight: number | null;
+  reps: number | null;
+  completed: boolean;
 }
 
 export interface Meal {
@@ -333,17 +338,21 @@ export const api = {
   deleteInvestmentGoal: (id: string) => request<{ ok: true }>(`/investments/goals/${id}`, { method: "DELETE" }),
 
   // Workouts
-  getWorkouts: () => request<{ workouts: Workout[]; exercises: WorkoutExercise[] }>("/workouts"),
+  getWorkouts: () =>
+    request<{ workouts: Workout[]; exercises: WorkoutExercise[]; sets: WorkoutSet[] }>("/workouts"),
   createWorkout: (data: { workout_date: string; name?: string; notes?: string }) =>
     request<Workout>("/workouts", { method: "POST", body: JSON.stringify(data) }),
   updateWorkout: (id: string, data: Partial<Pick<Workout, "name" | "notes">>) =>
     request<Workout>(`/workouts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteWorkout: (id: string) => request<{ ok: true }>(`/workouts/${id}`, { method: "DELETE" }),
-  createWorkoutExercise: (
-    workoutId: string,
-    data: { name: string; sets?: number; reps?: number; weight?: number; notes?: string }
-  ) => request<WorkoutExercise>(`/workouts/${workoutId}/exercises`, { method: "POST", body: JSON.stringify(data) }),
+  createWorkoutExercise: (workoutId: string, data: { name: string; notes?: string }) =>
+    request<WorkoutExercise>(`/workouts/${workoutId}/exercises`, { method: "POST", body: JSON.stringify(data) }),
   deleteWorkoutExercise: (id: string) => request<{ ok: true }>(`/workouts/exercises/${id}`, { method: "DELETE" }),
+  createWorkoutSet: (exerciseId: string, data: { weight?: number | null; reps?: number | null; completed?: boolean }) =>
+    request<WorkoutSet>(`/workouts/exercises/${exerciseId}/sets`, { method: "POST", body: JSON.stringify(data) }),
+  updateWorkoutSet: (id: string, data: Partial<{ weight: number | null; reps: number | null; completed: boolean }>) =>
+    request<WorkoutSet>(`/workouts/sets/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteWorkoutSet: (id: string) => request<{ ok: true }>(`/workouts/sets/${id}`, { method: "DELETE" }),
 
   // Workout routines
   getRoutines: () => request<{ routines: WorkoutRoutine[]; exercises: WorkoutRoutineExercise[] }>("/routines"),

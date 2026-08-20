@@ -167,6 +167,10 @@ CREATE TABLE IF NOT EXISTS workouts (
 );
 CREATE INDEX IF NOT EXISTS idx_workouts_user ON workouts(user_id);
 
+-- sets/reps/weight here are legacy (pre-per-set-logging) — a new exercise row no longer
+-- writes them; see workout_sets below, which is what the per-set UI (Hevy-style: Set /
+-- Previous / Lbs / Reps / done-checkbox rows, "+ Add Set") actually reads and writes.
+-- Left in place rather than dropped so old data isn't destroyed by a column removal.
 CREATE TABLE IF NOT EXISTS workout_exercises (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -180,6 +184,18 @@ CREATE TABLE IF NOT EXISTS workout_exercises (
 );
 CREATE INDEX IF NOT EXISTS idx_workout_exercises_user ON workout_exercises(user_id);
 CREATE INDEX IF NOT EXISTS idx_workout_exercises_workout ON workout_exercises(workout_id);
+
+CREATE TABLE IF NOT EXISTS workout_sets (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  exercise_id TEXT NOT NULL,
+  set_index INTEGER NOT NULL DEFAULT 0,
+  weight REAL,
+  reps INTEGER,
+  completed INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_workout_sets_user ON workout_sets(user_id);
+CREATE INDEX IF NOT EXISTS idx_workout_sets_exercise ON workout_sets(exercise_id);
 
 CREATE TABLE IF NOT EXISTS meals (
   id TEXT PRIMARY KEY,
@@ -261,5 +277,67 @@ CREATE INDEX IF NOT EXISTS idx_weight_entries_date ON weight_entries(entry_date)
         WHERE t2.list_id = todos.list_id AND t2.user_id = todos.user_id AND t2.created_at < todos.created_at
       )
     `);
+  }
+
+  backfillWorkoutSets(db);
+}
+
+interface LegacyExerciseRow {
+  id: string;
+  user_id: string;
+  sets: number | null;
+  reps: number | null;
+  weight: number | null;
+  notes: string;
+}
+
+// The import script that first populated real workout history recorded each set's exact
+// weight/reps in the exercise's notes as "Sets: 80x8, 90x7" (or "Sets: 15, 15" for
+// reps-only, bodyweight-style exercises) precisely so this migration could reconstruct
+// real per-set rows instead of just duplicating one aggregate value. Falls back to
+// duplicating weight/reps across `sets` count rows when notes don't match that shape —
+// still correct in aggregate, just without the set-to-set variation.
+function parseSetsFromNotes(notes: string, count: number): { weight: number | null; reps: number | null }[] | null {
+  const match = notes.match(/Sets: ([^;]+)/);
+  if (!match) return null;
+  const parts = match[1].split(",").map((s) => s.trim());
+  if (parts.length !== count) return null;
+  const result: { weight: number | null; reps: number | null }[] = [];
+  for (const p of parts) {
+    const withWeight = p.match(/^([\d.]+)x([\d.]+)$/);
+    if (withWeight) {
+      result.push({ weight: parseFloat(withWeight[1]), reps: parseFloat(withWeight[2]) });
+      continue;
+    }
+    const repsOnly = p.match(/^([\d.]+)$/);
+    if (repsOnly) {
+      result.push({ weight: null, reps: parseFloat(repsOnly[1]) });
+      continue;
+    }
+    return null; // unrecognized shape — bail to the duplicate-fallback for this exercise
+  }
+  return result;
+}
+
+// One-time backfill from the pre-per-set schema (a single aggregate sets/reps/weight per
+// exercise) into real workout_sets rows. Idempotent: skips any exercise that already has
+// set rows, so it's safe to run on every boot.
+function backfillWorkoutSets(db: Database): void {
+  const exercises = db
+    .query<LegacyExerciseRow, []>("SELECT id, user_id, sets, reps, weight, notes FROM workout_exercises WHERE sets IS NOT NULL AND sets > 0")
+    .all();
+  if (exercises.length === 0) return;
+
+  const insertSet = db.query(
+    "INSERT INTO workout_sets (id, user_id, exercise_id, set_index, weight, reps, completed) VALUES (?, ?, ?, ?, ?, ?, 1)"
+  );
+  const hasSetsQuery = db.query<{ n: number }, [string]>("SELECT COUNT(*) as n FROM workout_sets WHERE exercise_id = ?");
+
+  for (const ex of exercises) {
+    if ((hasSetsQuery.get(ex.id)?.n ?? 0) > 0) continue;
+    const count = ex.sets ?? 1;
+    const parsed = parseSetsFromNotes(ex.notes, count);
+    const sets = parsed ?? Array.from({ length: count }, () => ({ weight: ex.weight, reps: ex.reps }));
+    sets.forEach((s, i) => insertSet.run(crypto.randomUUID(), ex.user_id, ex.id, i, s.weight, s.reps));
   }
 }
