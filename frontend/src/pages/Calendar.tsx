@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type CalendarEvent } from "../api/client";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MAX_EVENTS_PER_CELL = 3;
 
 interface DayCell {
   date: Date;
@@ -42,6 +43,15 @@ function dateInputValue(d: Date): string {
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+// Compact form for inside a day cell — "9:00am" rather than "9:00 AM", since cells only
+// have a few pixels of width to work with.
+function formatShortTime(iso: string): string {
+  return new Date(iso)
+    .toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })
+    .replace(" ", "")
+    .toLowerCase();
 }
 
 export default function Calendar() {
@@ -158,12 +168,12 @@ export default function Calendar() {
     <div>
       <h1>Calendar</h1>
 
-      <div className="row-between" style={{ marginBottom: 12 }}>
-        <button type="button" className="btn-icon" onClick={() => goToMonth(-1)} aria-label="Previous month">
+      <div className="calendar-nav">
+        <button type="button" className="btn" onClick={() => goToMonth(-1)} aria-label="Previous month">
           ‹
         </button>
-        <strong>{viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</strong>
-        <button type="button" className="btn-icon" onClick={() => goToMonth(1)} aria-label="Next month">
+        <span className="calendar-title">{viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>
+        <button type="button" className="btn" onClick={() => goToMonth(1)} aria-label="Next month">
           ›
         </button>
       </div>
@@ -175,15 +185,9 @@ export default function Calendar() {
       {loading ? (
         <div className="empty-state">Loading…</div>
       ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(7, 1fr)",
-            gap: 4,
-          }}
-        >
+        <div className="calendar-grid">
           {WEEKDAYS.map((w) => (
-            <div key={w} style={{ textAlign: "center", fontSize: 11, color: "var(--text-dim)", padding: "4px 0" }}>
+            <div key={w} className="calendar-weekday">
               {w}
             </div>
           ))}
@@ -192,35 +196,27 @@ export default function Calendar() {
             const dayEvents = eventsByDay.get(cell.date.toDateString()) ?? [];
             const isToday = sameDay(cell.date, today);
             const isSelected = selectedDate !== null && sameDay(cell.date, selectedDate);
+            const shown = dayEvents.slice(0, MAX_EVENTS_PER_CELL);
+            const extra = dayEvents.length - shown.length;
             return (
               <button
                 key={i}
                 type="button"
+                className={`calendar-cell${cell.inMonth ? "" : " outside"}${isToday ? " is-today" : ""}${
+                  isSelected ? " is-selected" : ""
+                }`}
                 onClick={() => selectDay(cell.date)}
-                style={{
-                  minHeight: 44,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 2,
-                  padding: "6px 2px",
-                  background: isSelected ? "rgba(77, 163, 255, 0.15)" : "var(--bg-card)",
-                  border: isToday ? "1px solid var(--accent)" : "1px solid var(--border)",
-                  borderRadius: "var(--radius-sm)",
-                  color: cell.inMonth ? "var(--text)" : "var(--text-faint)",
-                  fontSize: 13,
-                }}
               >
-                <span>{cell.date.getDate()}</span>
-                {dayEvents.length > 0 && (
-                  <span
-                    className="chip chip-accent"
-                    style={{ padding: "0 6px", fontSize: 10, minWidth: 16, textAlign: "center" }}
-                  >
-                    {dayEvents.length}
-                  </span>
-                )}
+                <div className="calendar-date">{cell.date.getDate()}</div>
+                <div className="calendar-events">
+                  {shown.map((ev) => (
+                    <div className="calendar-event" key={ev.id} title={ev.title}>
+                      {!ev.all_day && <span className="calendar-event-time">{formatShortTime(ev.start_at)} </span>}
+                      {ev.title}
+                    </div>
+                  ))}
+                  {extra > 0 && <div className="calendar-more">+{extra} more</div>}
+                </div>
               </button>
             );
           })}

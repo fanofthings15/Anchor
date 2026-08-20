@@ -69,10 +69,15 @@ a {
   background: var(--bg-raised);
   border-top: 1px solid var(--border);
   padding-bottom: var(--safe-bottom);
+  display: flex;
 }
 
+/* On mobile this wrapper shouldn't itself compete for flex space against the "More"
+   trigger button next to it — `display: contents` hands its children straight to
+   `.app-nav`'s flex row, so all 4 primary links + the trigger end up as 5 equal
+   siblings instead of the trigger getting squeezed onto its own wrapped line. */
 .app-nav-links {
-  display: flex;
+  display: contents;
 }
 
 .app-nav-link,
@@ -124,12 +129,22 @@ a {
   flex-direction: column;
 }
 
+.more-sheet-handle-area {
+  padding: 10px 0 14px;
+  touch-action: none;
+  cursor: grab;
+}
+
+.more-sheet-handle-area:active {
+  cursor: grabbing;
+}
+
 .more-sheet-handle {
   width: 36px;
   height: 4px;
   border-radius: 2px;
   background: var(--border);
-  margin: 8px auto 12px;
+  margin: 0 auto;
 }
 
 .more-sheet-link {
@@ -163,12 +178,17 @@ a {
     height: 100vh;
     width: 220px;
     flex-shrink: 0;
+    flex-direction: column;
     border-top: none;
     border-right: 1px solid var(--border);
     padding: 20px 0;
   }
 
+  /* Back to being a real flex container here (undoing the mobile `contents` trick) —
+     desktop wants every link, including the ones folded into the mobile "More" sheet,
+     grouped as one vertical list. */
   .app-nav-links {
+    display: flex;
     flex-direction: column;
   }
 
@@ -285,6 +305,7 @@ input[type="text"],
 input[type="number"],
 input[type="date"],
 input[type="datetime-local"],
+input[type="time"],
 select,
 textarea {
   background: var(--bg-raised);
@@ -292,7 +313,10 @@ textarea {
   border-radius: var(--radius-sm);
   color: var(--text);
   padding: 10px 12px;
-  font-size: 15px;
+  /* Must stay >= 16px — iOS Safari auto-zooms the page on focus for any input with a
+     smaller computed font-size, which is exactly what leaves the page zoomed in and
+     side-scrollable afterward. */
+  font-size: 16px;
   min-height: 44px;
 }
 
@@ -413,6 +437,104 @@ button {
   border-radius: var(--radius);
   padding: 16px 12px 8px;
   margin-bottom: 16px;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.calendar-title {
+  font-size: 16px;
+  font-weight: 600;
+  min-width: 160px;
+  text-align: center;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.calendar-weekday {
+  text-align: center;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding-bottom: 4px;
+}
+
+.calendar-cell {
+  width: 100%;
+  min-width: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px;
+  min-height: 78px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.calendar-cell.outside {
+  opacity: 0.35;
+}
+
+.calendar-cell.is-today {
+  border-color: var(--accent);
+}
+
+.calendar-cell.is-selected {
+  background: rgba(77, 163, 255, 0.15);
+  border-color: var(--accent-dim);
+}
+
+.calendar-date {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.calendar-cell.is-today .calendar-date {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.calendar-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.calendar-event {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.calendar-event-time {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.calendar-more {
+  font-size: 10px;
+  color: var(--text-faint);
 }
 
 .tabs {

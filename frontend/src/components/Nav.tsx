@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { useEffect } from "react";
 
 const PRIMARY = [
   { to: "/", label: "Today", icon: "☀" },
@@ -23,13 +22,46 @@ const MORE = [
 // `.app-nav` rules. The "More" sheet only ever opens from the mobile tab bar (the
 // desktop sidebar just lists every link, so its trigger is hidden there via CSS), but
 // the sheet markup itself stays in the tree either way for simplicity.
+// Threshold (px) a downward drag on the sheet's handle must clear before it counts as
+// "dismiss" rather than snapping back — matches the feel of a native bottom sheet.
+const DISMISS_THRESHOLD = 80;
+
 export default function Nav() {
   const [moreOpen, setMoreOpen] = useState(false);
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragStartY = useRef(0);
   const location = useLocation();
 
   useEffect(() => {
     setMoreOpen(false);
   }, [location.pathname]);
+
+  function closeSheet() {
+    setMoreOpen(false);
+    setDragY(0);
+    setDragging(false);
+  }
+
+  function handleHandlePointerDown(e: React.PointerEvent) {
+    dragStartY.current = e.clientY;
+    setDragging(true);
+    (e.target as Element).setPointerCapture(e.pointerId);
+  }
+
+  function handleHandlePointerMove(e: React.PointerEvent) {
+    if (!dragging) return;
+    setDragY(Math.max(0, e.clientY - dragStartY.current));
+  }
+
+  function handleHandlePointerUp() {
+    if (dragging && dragY > DISMISS_THRESHOLD) {
+      closeSheet();
+    } else {
+      setDragging(false);
+      setDragY(0);
+    }
+  }
 
   return (
     <>
@@ -63,11 +95,23 @@ export default function Nav() {
       </nav>
 
       {moreOpen && (
-        <div className="more-sheet-backdrop" onClick={() => setMoreOpen(false)}>
-          <div className="more-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="more-sheet-handle" />
+        <div className="more-sheet-backdrop" onClick={closeSheet}>
+          <div
+            className="more-sheet"
+            onClick={(e) => e.stopPropagation()}
+            style={{ transform: `translateY(${dragY}px)`, transition: dragging ? "none" : "transform 0.2s ease" }}
+          >
+            <div
+              className="more-sheet-handle-area"
+              onPointerDown={handleHandlePointerDown}
+              onPointerMove={handleHandlePointerMove}
+              onPointerUp={handleHandlePointerUp}
+              onPointerCancel={handleHandlePointerUp}
+            >
+              <div className="more-sheet-handle" />
+            </div>
             {MORE.map((item) => (
-              <NavLink key={item.to} to={item.to} className="more-sheet-link" onClick={() => setMoreOpen(false)}>
+              <NavLink key={item.to} to={item.to} className="more-sheet-link" onClick={closeSheet}>
                 {item.label}
               </NavLink>
             ))}
