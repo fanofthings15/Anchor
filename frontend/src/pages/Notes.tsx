@@ -14,10 +14,17 @@ function DragHandle(props: Record<string, unknown>) {
   );
 }
 
-function preview(body: string): string {
-  // Strips the raw markdown markers (##, #, **) rather than rendering them — this is a
-  // plain-text snippet in a compact card, not worth a second HTML renderer for.
-  const trimmed = body.trim().replace(/^#{1,2}\s+/gm, "").replace(/\*\*(.+?)\*\*/g, "$1");
+function preview(bodyHtml: string): string {
+  // Note bodies are sanitized HTML (from the WYSIWYG editor), not markdown — pull the
+  // plain text out block by block so a card preview reads as flowing text instead of
+  // literal "<p>" tags run together.
+  const doc = new DOMParser().parseFromString(bodyHtml, "text/html");
+  const parts: string[] = [];
+  doc.body.querySelectorAll("p, h2, h3").forEach((el) => {
+    const text = el.textContent?.trim();
+    if (text) parts.push(text);
+  });
+  const trimmed = parts.join(" ") || doc.body.textContent?.trim() || "";
   return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
 }
 
@@ -32,6 +39,7 @@ function SortableNoteCard({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 };
+  const previewText = note.locked ? "" : preview(note.body);
 
   return (
     <div className="card note-card" ref={setNodeRef} style={style} onClick={onOpen}>
@@ -54,9 +62,9 @@ function SortableNoteCard({
           {note.pinned ? "★" : "☆"}
         </button>
       </div>
-      {!note.locked && note.body.trim() && (
+      {previewText && (
         <div className="text-dim" style={{ marginTop: 6, fontSize: 13 }}>
-          {preview(note.body)}
+          {previewText}
         </div>
       )}
       {!note.locked && note.tags.length > 0 && (

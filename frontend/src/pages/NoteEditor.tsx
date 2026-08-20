@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, isNotesUnlockStale, NOTES_UNLOCK_KEY, type Note, type NoteImage } from "../api/client";
+import { api, clearLastNote, isNotesUnlockStale, NOTES_UNLOCK_KEY, recordLastNote, type Note, type NoteImage } from "../api/client";
 
 function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -152,11 +152,18 @@ export default function NoteEditor() {
       const [n, settings] = await Promise.all([api.getNote(noteId), api.getSettings()]);
       setNote(n);
       setHasNotesPin(settings.has_notes_pin);
+      recordLastNote(n.id, n.locked);
       if (!n.requires_unlock) {
         setTitle(n.title);
         savedTitleRef.current = n.title;
         setImages(await api.listNoteImages(noteId));
       }
+    } catch {
+      // Most likely the note was deleted (e.g. from another device) since the Notes tab
+      // last cached it as the one to jump back into — that cache would otherwise send
+      // every future tap right back into this same dead end.
+      clearLastNote(noteId);
+      navigate("/notes");
     } finally {
       setLoading(false);
     }
@@ -207,6 +214,7 @@ export default function NoteEditor() {
     if (!id || !note) return;
     const updated = await api.updateNote(id, { locked: !note.locked });
     setNote(updated);
+    recordLastNote(id, updated.locked);
   }
 
   async function addTag(e: React.FormEvent) {
@@ -228,6 +236,7 @@ export default function NoteEditor() {
   async function remove() {
     if (!id) return;
     await api.deleteNote(id);
+    clearLastNote(id);
     navigate("/notes");
   }
 

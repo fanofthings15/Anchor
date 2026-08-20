@@ -41,6 +41,32 @@ export function isNotesUnlockStale(): boolean {
   return Date.now() - last > NOTES_INACTIVITY_TIMEOUT_MS;
 }
 
+// Remembers which note was open last so tapping the Notes tab can jump straight back into
+// it instead of always landing on the list — localStorage (not sessionStorage) since this
+// should survive fully closing and reopening the app, same as a native notes app would.
+// Only the id and lock flag are cached, never note content.
+const LAST_NOTE_KEY = "anchor-last-note";
+
+export function recordLastNote(id: string, locked: boolean) {
+  localStorage.setItem(LAST_NOTE_KEY, JSON.stringify({ id, locked }));
+}
+
+export function getLastNote(): { id: string; locked: boolean } | null {
+  try {
+    const raw = localStorage.getItem(LAST_NOTE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return typeof parsed?.id === "string" && typeof parsed?.locked === "boolean" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearLastNote(id?: string) {
+  if (id && getLastNote()?.id !== id) return;
+  localStorage.removeItem(LAST_NOTE_KEY);
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (isNotesUnlockStale()) sessionStorage.removeItem(NOTES_UNLOCK_KEY);
   const unlockToken = sessionStorage.getItem(NOTES_UNLOCK_KEY);

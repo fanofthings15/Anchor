@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { getLastNote } from "../api/client";
 
 const PRIMARY = [
   { to: "/", label: "Today", icon: "☀" },
@@ -32,6 +33,20 @@ export default function Nav() {
   const [dragging, setDragging] = useState(false);
   const dragStartY = useRef(0);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Tapping the Notes tab from elsewhere in the app jumps straight back into whichever
+  // note was open last (if it isn't locked), instead of always landing on the list —
+  // but only when actually switching into the notes section from somewhere else, so it
+  // never fights the editor's own "back to list" button or in-app note-to-note links.
+  function handleNotesClick(e: React.MouseEvent) {
+    if (location.pathname.startsWith("/notes")) return;
+    const last = getLastNote();
+    if (last && !last.locked) {
+      e.preventDefault();
+      navigate(`/notes/${last.id}`);
+    }
+  }
 
   useEffect(() => {
     setMoreOpen(false);
@@ -68,7 +83,13 @@ export default function Nav() {
       <nav className="app-nav" aria-label="Primary">
         <div className="app-nav-links">
           {PRIMARY.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === "/"} className="app-nav-link">
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/"}
+              className="app-nav-link"
+              onClick={item.to === "/notes" ? handleNotesClick : undefined}
+            >
               <span className="app-nav-icon" aria-hidden="true">
                 {item.icon}
               </span>
