@@ -483,4 +483,32 @@ export const api = {
 
   // Today dashboard
   getToday: () => request<TodayResponse>("/today"),
+
+  // Full data export/restore — export triggers a real browser file download rather than
+  // going through the JSON-parsing request() helper above, since the point is to hand
+  // the user back a file, not a parsed object.
+  downloadBackup: async (): Promise<void> => {
+    const unlockToken = sessionStorage.getItem(NOTES_UNLOCK_KEY);
+    const res = await fetch("/api/backup/export", {
+      redirect: "manual",
+      headers: unlockToken ? { "X-notes-unlock": unlockToken } : {},
+    });
+    if (res.type === "opaqueredirect") {
+      reauthRedirectDetected();
+      throw new Error("Session expired, reloading…");
+    }
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    const disposition = res.headers.get("Content-Disposition");
+    const filename = disposition?.match(/filename="([^"]+)"/)?.[1] ?? "anchor-backup.json";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+  restoreBackup: (data: unknown) => request<{ ok: true }>("/backup/import", { method: "POST", body: JSON.stringify(data) }),
 };

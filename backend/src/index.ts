@@ -18,11 +18,14 @@ import { mealsRouter } from "./routes/meals";
 import { settingsRouter } from "./routes/settings";
 import { todayRouter } from "./routes/today";
 import { externalRouter } from "./routes/external";
+import { backupRouter } from "./routes/backup";
+import { startScheduledBackups } from "./scheduledBackup";
 
 const app = express();
 // Raised from Express's 100kb default so pasted note images (sent as base64 JSON, ~33%
-// larger than the raw file) fit — notes.ts separately caps the decoded image at 8MB.
-app.use(express.json({ limit: "12mb" }));
+// larger than the raw file) fit, and so restoring a full backup (every note image
+// embedded as base64 in one request body) fits too.
+app.use(express.json({ limit: "50mb" }));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uiDir = path.join(__dirname, "../../frontend/dist");
@@ -71,6 +74,7 @@ app.use("/api/weight", weightRouter);
 app.use("/api/meals", mealsRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/today", todayRouter);
+app.use("/api/backup", backupRouter);
 
 // Serves the built frontend on the same port as the API — production is a single
 // process/single origin, same shape as Anime Recomender and Event Dashboard. Only
@@ -87,3 +91,5 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3320;
 app.listen(PORT, () => {
   console.log(`[anchor] backend listening on http://localhost:${PORT}`);
 });
+
+startScheduledBackups();

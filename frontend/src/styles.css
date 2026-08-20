@@ -691,7 +691,7 @@ button {
   margin-bottom: 4px;
 }
 
-.note-preview {
+.note-editor-body {
   width: 100%;
   min-height: 50vh;
   padding: 10px 12px;
@@ -700,9 +700,15 @@ button {
   background: var(--bg-raised);
   font-size: 16px;
   line-height: 1.5;
+  outline: none;
 }
 
-.note-preview h2 {
+.note-editor-body:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-faint);
+}
+
+.note-editor-body h2 {
   font-size: 20px;
   margin: 0 0 8px;
   /* Undoes the global h2 rule's uppercase/letter-spacing, meant for section labels like
@@ -712,22 +718,14 @@ button {
   color: var(--text);
 }
 
-.note-preview h3 {
+.note-editor-body h3 {
   font-size: 17px;
   margin: 0 0 6px;
   color: var(--text);
 }
 
-.note-preview p {
+.note-editor-body p {
   margin: 0 0 8px;
-}
-
-.note-editor-body {
-  width: 100%;
-  min-height: 50vh;
-  resize: vertical;
-  font-size: 16px;
-  line-height: 1.5;
 }
 
 .note-image-thumb {

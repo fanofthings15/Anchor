@@ -23,6 +23,14 @@ export default function Settings() {
   const [tokenBusy, setTokenBusy] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
 
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [pendingRestore, setPendingRestore] = useState<{ data: unknown; exportedAt: string; fileName: string } | null>(null);
+  const [restoreConfirmText, setRestoreConfirmText] = useState("");
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreDone, setRestoreDone] = useState(false);
+
   useEffect(() => {
     load();
   }, []);
@@ -142,6 +150,53 @@ export default function Settings() {
     if (!newToken) return;
     await navigator.clipboard.writeText(newToken);
     setTokenCopied(true);
+  }
+
+  async function downloadBackup() {
+    setExportError("");
+    setExporting(true);
+    try {
+      await api.downloadBackup();
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Backup download failed");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleBackupFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // lets the same file be picked again after a cancel
+    if (!file) return;
+    setRestoreError("");
+    setRestoreDone(false);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (typeof data !== "object" || data === null || typeof data.exported_at !== "string") {
+        throw new Error("Doesn't look like an Anchor backup file");
+      }
+      setPendingRestore({ data, exportedAt: data.exported_at, fileName: file.name });
+      setRestoreConfirmText("");
+    } catch (err) {
+      setRestoreError(err instanceof Error ? err.message : "Couldn't read that file");
+    }
+  }
+
+  async function confirmRestore() {
+    if (!pendingRestore || restoreConfirmText !== "RESTORE") return;
+    setRestoring(true);
+    setRestoreError("");
+    try {
+      await api.restoreBackup(pendingRestore.data);
+      setPendingRestore(null);
+      setRestoreConfirmText("");
+      setRestoreDone(true);
+    } catch (err) {
+      setRestoreError(err instanceof Error ? err.message : "Restore failed — your data was not changed");
+    } finally {
+      setRestoring(false);
+    }
   }
 
   if (loading) {
@@ -315,6 +370,81 @@ export default function Settings() {
             </button>
           </div>
         )}
+      </div>
+
+      <h2 style={{ marginTop: 24 }}>Data Backup</h2>
+      <div className="card">
+        <div className="text-dim" style={{ fontSize: 13, marginBottom: 12 }}>
+          Downloads everything — notes, todos, bills, workouts, meals, all of it — as one
+          file you can keep somewhere offsite. Locked notes are only included in full if
+          you've unlocked them in this browser session first; otherwise their content is
+          left out, same as anywhere else in the app.
+        </div>
+        <div className="form-actions" style={{ marginBottom: exportError ? 8 : 0 }}>
+          <button type="button" className="btn btn-primary" onClick={downloadBackup} disabled={exporting}>
+            {exporting ? "Preparing…" : "Download backup"}
+          </button>
+        </div>
+        {exportError && (
+          <div className="text-danger" style={{ fontSize: 13 }}>
+            {exportError}
+          </div>
+        )}
+
+        <div style={{ borderTop: "1px solid var(--border)", marginTop: 16, paddingTop: 16 }}>
+          <div className="text-danger" style={{ fontSize: 13, marginBottom: 12 }}>
+            Restoring replaces ALL of your current data with the contents of the backup
+            file — this can't be undone. Only use this to recover from real data loss.
+          </div>
+          {!pendingRestore ? (
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label htmlFor="restore-file">Choose a backup file</label>
+              <input id="restore-file" type="file" accept="application/json" onChange={handleBackupFileChosen} />
+            </div>
+          ) : (
+            <div className="card" style={{ background: "var(--bg-card)" }}>
+              <div style={{ fontSize: 13, marginBottom: 8 }}>
+                <strong>{pendingRestore.fileName}</strong>
+                <div className="text-dim" style={{ marginTop: 2 }}>
+                  Exported {new Date(pendingRestore.exportedAt).toLocaleString()}
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="restore-confirm">Type RESTORE to confirm replacing all your data</label>
+                <input
+                  id="restore-confirm"
+                  type="text"
+                  value={restoreConfirmText}
+                  onChange={(e) => setRestoreConfirmText(e.target.value)}
+                  placeholder="RESTORE"
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" className="btn" onClick={() => setPendingRestore(null)} disabled={restoring}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={confirmRestore}
+                  disabled={restoring || restoreConfirmText !== "RESTORE"}
+                >
+                  {restoring ? "Restoring…" : "Restore and replace my data"}
+                </button>
+              </div>
+            </div>
+          )}
+          {restoreError && (
+            <div className="text-danger" style={{ fontSize: 13, marginTop: 8 }}>
+              {restoreError}
+            </div>
+          )}
+          {restoreDone && (
+            <div className="text-dim" style={{ fontSize: 13, marginTop: 8 }}>
+              Restore complete — your data has been replaced with the backup.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

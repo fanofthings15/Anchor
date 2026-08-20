@@ -6,28 +6,32 @@ function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
+// Only these tags ever come out of sanitizeHtml — deliberately no attributes at all (they
+// get stripped even off allowed tags), so there's no way for pasted or stored content to
+// carry a style=/onclick=/etc through to what gets rendered via innerHTML. Anything not
+// in this list is unwrapped (its text kept, the tag itself dropped), not deleted outright.
+const ALLOWED_TAGS = new Set(["P", "BR", "STRONG", "B", "H2", "H3"]);
 
-// A deliberately tiny markdown subset (bold + two heading levels) rather than a full
-// parser/library — escapes first, then only ever introduces the handful of tags below
-// around already-escaped text, so this can't be used to inject arbitrary HTML.
-function applyBoldMarkup(escapedLine: string): string {
-  return escapedLine.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-}
-
-function renderMarkdown(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => {
-      const escaped = escapeHtml(line);
-      if (escaped.startsWith("## ")) return `<h3>${applyBoldMarkup(escaped.slice(3))}</h3>`;
-      if (escaped.startsWith("# ")) return `<h2>${applyBoldMarkup(escaped.slice(2))}</h2>`;
-      const bolded = applyBoldMarkup(escaped);
-      return bolded.trim() === "" ? "<br/>" : `<p>${bolded}</p>`;
-    })
-    .join("");
+function sanitizeHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  function clean(node: Node) {
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const el = child as HTMLElement;
+        if (!ALLOWED_TAGS.has(el.tagName)) {
+          while (el.firstChild) node.insertBefore(el.firstChild, el);
+          node.removeChild(el);
+          continue;
+        }
+        for (const attr of Array.from(el.attributes)) el.removeAttribute(attr.name);
+        clean(el);
+      } else if (child.nodeType !== Node.TEXT_NODE) {
+        node.removeChild(child); // comments, etc.
+      }
+    }
+  }
+  clean(doc.body);
+  return doc.body.innerHTML;
 }
 
 // Reads a pasted image clipboard item into a base64 data URI the backend's upload
@@ -49,7 +53,6 @@ export default function NoteEditor() {
   const [images, setImages] = useState<NoteImage[]>([]);
   const [loading, setLoading] = useState(true);
   const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
   const [newTag, setNewTag] = useState("");
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
@@ -58,16 +61,16 @@ export default function NoteEditor() {
   const [unlockError, setUnlockError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const bodyEditableRef = useRef<HTMLDivElement>(null);
 
-  // Latest values escape the render closure via refs so the unmount-time flush (browser
-  // back, nav-link tap, etc. — none of which necessarily blur the field first) always
-  // saves what's actually on screen instead of whatever was current when the effect ran.
+  // The body editor is uncontrolled (React never sets its innerHTML on every keystroke —
+  // that fights contentEditable's own cursor/selection handling) — bodyRef tracks the
+  // latest raw HTML via onInput instead, read out (and sanitized) only when actually
+  // saving. titleRef mirrors the same "latest value visible to the unmount-flush closure"
+  // purpose for the plain-text title input, which stays a normal controlled input.
   const titleRef = useRef(title);
-  const bodyRef = useRef(body);
+  const bodyRef = useRef("");
   titleRef.current = title;
-  bodyRef.current = body;
   const savedTitleRef = useRef("");
   const savedBodyRef = useRef("");
 
@@ -75,14 +78,10 @@ export default function NoteEditor() {
     if (!id) return;
     load(id);
     // Flush any unsaved edit when navigating away — covers back/nav-tap, which don't
-    // fire a textarea blur the way clicking another control on the same page does. A
-    // still-locked note (gated screen, nothing to flush) never populated these refs
-    // beyond their initial empty state, so this is a no-op there.
-    return () => {
-      if (titleRef.current !== savedTitleRef.current || bodyRef.current !== savedBodyRef.current) {
-        api.updateNote(id, { title: titleRef.current, body: bodyRef.current }).catch(() => {});
-      }
-    };
+    // fire a blur the way clicking another control on the same page does. A still-locked
+    // note (gated screen, nothing to flush) never populated these refs beyond their
+    // initial empty state, so this is a no-op there.
+    return () => flushDirty(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -95,13 +94,46 @@ export default function NoteEditor() {
     const interval = setInterval(() => {
       if (!isNotesUnlockStale()) return;
       sessionStorage.removeItem(NOTES_UNLOCK_KEY);
-      if (titleRef.current !== savedTitleRef.current || bodyRef.current !== savedBodyRef.current) {
-        api.updateNote(id, { title: titleRef.current, body: bodyRef.current }).catch(() => {});
-      }
+      flushDirty(id);
       load(id);
     }, 15_000);
     return () => clearInterval(interval);
   }, [id, note?.locked, note?.requires_unlock]);
+
+  // Initializes the contentEditable's DOM content directly (not via React re-render —
+  // React doesn't own this element's children once it's editable) exactly once per
+  // note-load or unlock transition. Deliberately keyed on id/requires_unlock rather than
+  // the whole `note` object, since `note` also changes on every unrelated update (pin
+  // toggle, tag add, the body save's own response) — re-running this on those would wipe
+  // out whatever the user is currently typing. `loading` is also a dependency: load()
+  // calls setNote(n) before its own later `await listNoteImages(...)` resolves, so
+  // note?.id can go from undefined to set while loading is still true (the contentEditable
+  // div isn't rendered yet in that branch, so the ref is null and this bails out) — without
+  // also re-running once loading flips back to false, that first bail was the only attempt
+  // and the editor would stay permanently empty after every fresh load.
+  useEffect(() => {
+    if (loading || !note || note.requires_unlock) return;
+    const el = bodyEditableRef.current;
+    if (!el) return;
+    const sanitized = sanitizeHtml(note.body);
+    el.innerHTML = sanitized;
+    bodyRef.current = sanitized;
+    savedBodyRef.current = sanitized;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id, note?.requires_unlock, loading]);
+
+  function flushDirty(noteId: string) {
+    const titleDirty = titleRef.current !== savedTitleRef.current;
+    const sanitizedBody = sanitizeHtml(bodyRef.current);
+    const bodyDirty = sanitizedBody !== savedBodyRef.current;
+    if (!titleDirty && !bodyDirty) return;
+    const patch: Partial<{ title: string; body: string }> = {};
+    if (titleDirty) patch.title = titleRef.current;
+    if (bodyDirty) patch.body = sanitizedBody;
+    api.updateNote(noteId, patch).catch(() => {});
+    if (titleDirty) savedTitleRef.current = titleRef.current;
+    if (bodyDirty) savedBodyRef.current = sanitizedBody;
+  }
 
   async function load(noteId: string) {
     setLoading(true);
@@ -111,9 +143,7 @@ export default function NoteEditor() {
       setHasNotesPin(settings.has_notes_pin);
       if (!n.requires_unlock) {
         setTitle(n.title);
-        setBody(n.body);
         savedTitleRef.current = n.title;
-        savedBodyRef.current = n.body;
         setImages(await api.listNoteImages(noteId));
       }
     } finally {
@@ -148,9 +178,11 @@ export default function NoteEditor() {
   }
 
   async function saveBody() {
-    if (!id || body === savedBodyRef.current) return;
-    savedBodyRef.current = body;
-    const updated = await api.updateNote(id, { body });
+    if (!id) return;
+    const sanitized = sanitizeHtml(bodyRef.current);
+    if (sanitized === savedBodyRef.current) return;
+    savedBodyRef.current = sanitized;
+    const updated = await api.updateNote(id, { body: sanitized });
     setNote(updated);
   }
 
@@ -188,21 +220,39 @@ export default function NoteEditor() {
     navigate("/notes");
   }
 
-  async function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
-    if (!id) return;
+  function handleInput() {
+    const el = bodyEditableRef.current;
+    if (!el) return;
+    // A fully-cleared contentEditable often still holds a stray <br> rather than being
+    // truly empty, which breaks the CSS :empty placeholder trick — flatten that case so
+    // the placeholder reappears when the note is actually blank.
+    if (el.innerHTML === "<br>") el.innerHTML = "";
+    bodyRef.current = el.innerHTML;
+  }
+
+  async function handlePaste(e: React.ClipboardEvent<HTMLDivElement>) {
     const imageItem = Array.from(e.clipboardData.items).find((item) => item.type.startsWith("image/"));
-    if (!imageItem) return;
-    e.preventDefault();
-    const file = imageItem.getAsFile();
-    if (!file) return;
-    setUploading(true);
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      const image = await api.uploadNoteImage(id, dataUrl);
-      setImages((prev) => [...prev, image]);
-    } finally {
-      setUploading(false);
+    if (imageItem) {
+      e.preventDefault();
+      if (!id) return;
+      const file = imageItem.getAsFile();
+      if (!file) return;
+      setUploading(true);
+      try {
+        const dataUrl = await fileToDataUrl(file);
+        const image = await api.uploadNoteImage(id, dataUrl);
+        setImages((prev) => [...prev, image]);
+      } finally {
+        setUploading(false);
+      }
+      return;
     }
+    // Force plain-text paste for everything else — foreign formatting (fonts, colors,
+    // spans) would just get stripped by sanitizeHtml on save anyway, so inserting it as
+    // styled first only to un-style it a moment later is pure visual noise.
+    e.preventDefault();
+    document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
+    handleInput();
   }
 
   async function removeImage(imageId: string) {
@@ -211,38 +261,26 @@ export default function NoteEditor() {
     setLightbox(null);
   }
 
-  // Wraps the current selection in **bold** markers. No-op with nothing selected — there's
-  // no cursor-position "start bold mode" concept here, only wrap-what's-highlighted.
+  // Both formatting commands run through execCommand — deprecated, but still the only
+  // way to apply formatting to a Selection inside a contentEditable without hand-rolling
+  // DOM range manipulation, and every engine this app actually runs on still implements
+  // it. onMouseDown preventDefault on the buttons stops them from stealing focus (and
+  // with it the text selection) away from the editable area before the command runs.
   function applyBold() {
-    const el = textareaRef.current;
-    if (!el || el.selectionStart === el.selectionEnd) return;
-    const { selectionStart: start, selectionEnd: end, value } = el;
-    const next = `${value.slice(0, start)}**${value.slice(start, end)}**${value.slice(end)}`;
-    setBody(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(start + 2, end + 2);
-    });
+    const el = bodyEditableRef.current;
+    if (!el) return;
+    el.focus();
+    document.execCommand("bold");
+    handleInput();
   }
 
-  // Toggles a "# " heading prefix on whichever line the cursor is currently in.
   function applyHeading() {
-    const el = textareaRef.current;
+    const el = bodyEditableRef.current;
     if (!el) return;
-    const { selectionStart: pos, value } = el;
-    const lineStart = value.lastIndexOf("\n", pos - 1) + 1;
-    const lineEndIdx = value.indexOf("\n", pos);
-    const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
-    const line = value.slice(lineStart, lineEnd);
-    const alreadyHeading = line.startsWith("# ");
-    const nextLine = alreadyHeading ? line.slice(2) : `# ${line}`;
-    const next = value.slice(0, lineStart) + nextLine + value.slice(lineEnd);
-    setBody(next);
-    const delta = alreadyHeading ? -2 : 2;
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(pos + delta, pos + delta);
-    });
+    el.focus();
+    const current = document.queryCommandValue("formatBlock").toLowerCase();
+    document.execCommand("formatBlock", false, current === "h2" ? "p" : "h2");
+    handleInput();
   }
 
   if (loading || !note) {
@@ -385,7 +423,6 @@ export default function NoteEditor() {
           className="btn-icon"
           onMouseDown={(e) => e.preventDefault()}
           onClick={applyBold}
-          disabled={previewMode}
           aria-label="Bold selected text"
           title="Bold (select text first)"
         >
@@ -396,31 +433,23 @@ export default function NoteEditor() {
           className="btn-icon"
           onMouseDown={(e) => e.preventDefault()}
           onClick={applyHeading}
-          disabled={previewMode}
           aria-label="Toggle heading on this line"
           title="Heading"
         >
           H
         </button>
-        <div style={{ flex: 1 }} />
-        <button type="button" className="btn" onClick={() => setPreviewMode((v) => !v)}>
-          {previewMode ? "Write" : "Preview"}
-        </button>
       </div>
 
-      {previewMode ? (
-        <div className="note-preview" dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }} />
-      ) : (
-        <textarea
-          ref={textareaRef}
-          className="note-editor-body"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onBlur={saveBody}
-          onPaste={handlePaste}
-          placeholder="Write something… (paste an image to attach it) — use **bold** or the B/H buttons above"
-        />
-      )}
+      <div
+        ref={bodyEditableRef}
+        className="note-editor-body"
+        contentEditable
+        suppressContentEditableWarning
+        onInput={handleInput}
+        onBlur={saveBody}
+        onPaste={handlePaste}
+        data-placeholder="Write something… (paste an image to attach it)"
+      />
 
       {uploading && <div className="text-dim" style={{ fontSize: 13, marginTop: 8 }}>Uploading image…</div>}
 
