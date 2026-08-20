@@ -17,6 +17,7 @@ import { weightRouter } from "./routes/weight";
 import { mealsRouter } from "./routes/meals";
 import { settingsRouter } from "./routes/settings";
 import { todayRouter } from "./routes/today";
+import { externalRouter } from "./routes/external";
 
 const app = express();
 // Raised from Express's 100kb default so pasted note images (sent as base64 JSON, ~33%
@@ -45,6 +46,13 @@ app.get("/:filename", (req, res, next) => {
     if (err) next();
   });
 });
+
+// /api/external — token-authenticated (not Authentik), for callers that can't carry a
+// browser SSO session (an iOS Shortcut). Mounted ahead of currentUser deliberately: it
+// resolves req.uid itself from a Bearer token instead. Also carved out of Authentik at
+// the Traefik layer — see Home-Wiki's coolify-apps.yml — same two-layer shape as the PWA
+// asset exemption above (both gates have to agree, or the caller can't get through).
+app.use("/api/external", externalRouter);
 
 // Resolves req.uid for every other route from Authentik's forward-auth header (or a
 // fixed dev fallback when there's no proxy in front of us at all — see currentUser.ts).

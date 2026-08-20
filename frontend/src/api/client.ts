@@ -237,6 +237,7 @@ export interface UserSettings {
   fat_target_g: number | null;
   goal_weight_lbs: number | null;
   has_notes_pin: boolean;
+  has_api_token: boolean;
   theme: "dark" | "light";
 }
 
@@ -453,6 +454,8 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify({ current_pin: currentPin }),
     }),
+  generateApiToken: () => request<{ token: string }>("/settings/api-token", { method: "POST" }),
+  revokeApiToken: () => request<{ has_api_token: boolean }>("/settings/api-token", { method: "DELETE" }),
 
   // Today dashboard
   getToday: () => request<TodayResponse>("/today"),

@@ -18,6 +18,11 @@ export default function Settings() {
   const [pinError, setPinError] = useState("");
   const [pinSaving, setPinSaving] = useState(false);
 
+  const [hasApiToken, setHasApiToken] = useState(false);
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [tokenBusy, setTokenBusy] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+
   useEffect(() => {
     load();
   }, []);
@@ -32,6 +37,7 @@ export default function Settings() {
       setFatTarget(s.fat_target_g != null ? String(s.fat_target_g) : "");
       setGoalWeight(s.goal_weight_lbs != null ? String(s.goal_weight_lbs) : "");
       setHasNotesPin(s.has_notes_pin);
+      setHasApiToken(s.has_api_token);
       setTheme(s.theme);
     } finally {
       setLoading(false);
@@ -107,6 +113,35 @@ export default function Settings() {
     } finally {
       setPinSaving(false);
     }
+  }
+
+  async function generateToken() {
+    setTokenBusy(true);
+    setTokenCopied(false);
+    try {
+      const { token } = await api.generateApiToken();
+      setNewToken(token);
+      setHasApiToken(true);
+    } finally {
+      setTokenBusy(false);
+    }
+  }
+
+  async function revokeToken() {
+    setTokenBusy(true);
+    try {
+      await api.revokeApiToken();
+      setHasApiToken(false);
+      setNewToken(null);
+    } finally {
+      setTokenBusy(false);
+    }
+  }
+
+  async function copyToken() {
+    if (!newToken) return;
+    await navigator.clipboard.writeText(newToken);
+    setTokenCopied(true);
   }
 
   if (loading) {
@@ -243,6 +278,44 @@ export default function Settings() {
           </button>
         </div>
       </form>
+
+      <h2 style={{ marginTop: 24 }}>API Token</h2>
+      <div className="card">
+        <div className="text-dim" style={{ fontSize: 13, marginBottom: 12 }}>
+          Lets an iOS Shortcut (or other script) start a workout routine without logging
+          in through the browser. Anyone with this token can act as you through the API —
+          treat it like a password.
+        </div>
+        {newToken ? (
+          <>
+            <div className="text-danger" style={{ fontSize: 13, marginBottom: 8 }}>
+              Copy this now — it won't be shown again.
+            </div>
+            <div className="field">
+              <input type="text" readOnly value={newToken} onFocus={(e) => e.target.select()} />
+            </div>
+            <div className="form-actions">
+              <button type="button" className="btn" onClick={() => setNewToken(null)}>
+                Done
+              </button>
+              <button type="button" className="btn btn-primary" onClick={copyToken}>
+                {tokenCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="form-actions">
+            {hasApiToken && (
+              <button type="button" className="btn text-danger" onClick={revokeToken} disabled={tokenBusy}>
+                Revoke token
+              </button>
+            )}
+            <button type="button" className="btn btn-primary" onClick={generateToken} disabled={tokenBusy}>
+              {tokenBusy ? "Working…" : hasApiToken ? "Regenerate token" : "Generate token"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db";
 import { hashPin } from "../auth/notesPin";
+import { generateApiToken, hashApiToken } from "../auth/apiToken";
 
 export const settingsRouter = Router();
 
@@ -12,6 +13,7 @@ interface SettingsRow {
   fat_target_g: number | null;
   goal_weight_lbs: number | null;
   notes_pin_hash: string | null;
+  api_token_hash: string | null;
   theme: "dark" | "light";
 }
 
@@ -22,6 +24,7 @@ const DEFAULT_SETTINGS = {
   fat_target_g: null as number | null,
   goal_weight_lbs: null as number | null,
   has_notes_pin: false,
+  has_api_token: false,
   theme: "dark" as "dark" | "light",
 };
 
@@ -33,6 +36,7 @@ function serialize(row: SettingsRow) {
     fat_target_g: row.fat_target_g,
     goal_weight_lbs: row.goal_weight_lbs,
     has_notes_pin: row.notes_pin_hash !== null,
+    has_api_token: row.api_token_hash !== null,
     theme: row.theme,
   };
 }
@@ -72,7 +76,24 @@ settingsRouter.patch("/", (req, res) => {
        theme = excluded.theme`
   ).run(req.uid, next.calorie_target, next.protein_target_g, next.carbs_target_g, next.fat_target_g, next.goal_weight_lbs, next.theme);
 
-  res.json({ ...next, has_notes_pin: base.has_notes_pin });
+  res.json({ ...next, has_notes_pin: base.has_notes_pin, has_api_token: base.has_api_token });
+});
+
+// Generates (or regenerates) a personal API token for programmatic access — e.g. an iOS
+// Shortcut that can't carry a browser SSO session. Only the hash is ever stored; the raw
+// token is returned exactly once here and can't be recovered later, only replaced.
+settingsRouter.post("/api-token", (req, res) => {
+  const token = generateApiToken();
+  db.query(
+    `INSERT INTO user_settings (user_id, api_token_hash, api_token_created_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET api_token_hash = excluded.api_token_hash, api_token_created_at = excluded.api_token_created_at`
+  ).run(req.uid, hashApiToken(token), new Date().toISOString());
+  res.json({ token });
+});
+
+settingsRouter.delete("/api-token", (req, res) => {
+  db.query("UPDATE user_settings SET api_token_hash = NULL, api_token_created_at = NULL WHERE user_id = ?").run(req.uid);
+  res.json({ has_api_token: false });
 });
 
 // Set or change the notes PIN — a plain 4-digit code, stored only as a hash. Changing an
