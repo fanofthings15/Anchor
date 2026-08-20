@@ -242,7 +242,6 @@ CREATE TABLE IF NOT EXISTS user_settings (
   api_token_created_at TEXT,
   theme TEXT NOT NULL DEFAULT 'dark'
 );
-CREATE INDEX IF NOT EXISTS idx_user_settings_api_token_hash ON user_settings(api_token_hash);
 
 CREATE TABLE IF NOT EXISTS saved_foods (
   id TEXT PRIMARY KEY,
