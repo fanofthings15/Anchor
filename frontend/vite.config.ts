@@ -30,15 +30,30 @@ export default defineConfig({
             // included), not just the path — an anchored `/^\/api\//` would never match a
             // real "http://host/api/..." request. A pathname-based function matcher
             // sidesteps that gotcha entirely.
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/"),
+            // /api/notes is excluded below (its own, more specific rule wins by being
+            // registered first) — its responses are redacted or not based on the caller's
+            // *current* unlock state, not baked into the URL, so a cached copy fetched
+            // while unlocked would keep serving that same unredacted content offline even
+            // after the note re-locks. Simplest safe answer: never cache it at all.
+            urlPattern: ({ url }) => url.pathname.startsWith("/api/") && !url.pathname.startsWith("/api/notes"),
             method: "GET",
             handler: "NetworkFirst",
             options: {
-              cacheName: "anchor-api-cache",
+              // Renamed from the first cut of this feature (anchor-api-cache), which had
+              // no /api/notes exclusion and could have cached an unlocked note's full
+              // content — this abandons that cache outright rather than risk anything
+              // still resolving from it.
+              cacheName: "anchor-api-cache-v2",
               networkTimeoutSeconds: 4,
               expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
+          },
+          {
+            // Notes: never served from cache, network-only — see the exclusion note above.
+            urlPattern: ({ url }) => url.pathname.startsWith("/api/notes"),
+            method: "GET",
+            handler: "NetworkOnly",
           },
         ],
       },
