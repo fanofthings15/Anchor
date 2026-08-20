@@ -272,6 +272,14 @@ CREATE TABLE IF NOT EXISTS weight_entries (
 );
 CREATE INDEX IF NOT EXISTS idx_weight_entries_user ON weight_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_weight_entries_date ON weight_entries(entry_date);
+
+-- Tracks one-time data-repair passes that can't be expressed as an idempotent
+-- ADD COLUMN/backfill (e.g. re-deriving values from data that's already been
+-- transformed once) — run exactly once, ever, per key, rather than on every boot.
+CREATE TABLE IF NOT EXISTS migration_flags (
+  key TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);
 `);
 
   // sort_order was added to `todos` after the initial schema (drag-to-reorder within a
@@ -307,6 +315,27 @@ CREATE INDEX IF NOT EXISTS idx_weight_entries_date ON weight_entries(entry_date)
   if (!tableColumns(db, "user_settings").includes("goal_weight_lbs")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN goal_weight_lbs REAL");
   }
+
+  // The first shipped version of the distance-parsing regex (`/mi/` with no boundary)
+  // matched inside "min" too, so any cardio exercise logged as duration-only (e.g. "30
+  // min", no "X mi" segment) got its duration value copied into distance_miles as well.
+  // That's already landed in some databases via backfillCardioExercises above before this
+  // fix — a real correction pass, not just a regex tweak, so it needs to run once against
+  // already-cardio rows too (which the exercise_type = 'strength' guard above skips on
+  // every run after the first). Gated by migration_flags so it never re-runs and clobbers
+  // a distance/duration a user has since corrected by hand in the UI.
+  if (!hasMigrationFlag(db, "cardio_distance_regex_fix_v1")) {
+    fixCardioDistanceRegexBug(db);
+    setMigrationFlag(db, "cardio_distance_regex_fix_v1");
+  }
+}
+
+function hasMigrationFlag(db: Database, key: string): boolean {
+  return db.query<{ n: number }, [string]>("SELECT COUNT(*) as n FROM migration_flags WHERE key = ?").get(key)!.n > 0;
+}
+
+function setMigrationFlag(db: Database, key: string): void {
+  db.query("INSERT OR IGNORE INTO migration_flags (key, applied_at) VALUES (?, ?)").run(key, new Date().toISOString());
 }
 
 interface LegacyCardioExerciseRow {
@@ -344,10 +373,42 @@ function backfillCardioExercises(db: Database): void {
 
   for (const ex of candidates) {
     markCardio.run(ex.id);
-    const milesMatch = ex.notes.match(/([\d.]+)\s*mi/);
-    const minutesMatch = ex.notes.match(/(\d+)\s*min/);
-    const distance = milesMatch ? parseFloat(milesMatch[1]) : null;
-    const duration = minutesMatch ? parseInt(minutesMatch[1], 10) * 60 : null;
+    const { distance, duration } = parseCardioNotes(ex.notes);
+    for (const row of setsForExercise.all(ex.id)) {
+      updateSet.run(distance, duration, row.id);
+    }
+  }
+}
+
+// "mi" must not be immediately followed by "n" — otherwise it matches inside "min" too
+// (e.g. "30 min" would wrongly parse a 30-mile distance out of a duration-only entry).
+function parseCardioNotes(notes: string): { distance: number | null; duration: number | null } {
+  const milesMatch = notes.match(/([\d.]+)\s*mi(?!n)/);
+  const minutesMatch = notes.match(/(\d+)\s*min/);
+  return {
+    distance: milesMatch ? parseFloat(milesMatch[1]) : null,
+    duration: minutesMatch ? parseInt(minutesMatch[1], 10) * 60 : null,
+  };
+}
+
+// One-time repair for data already corrupted by the pre-fix regex above (see the
+// migration_flags gate in runMigrations) — re-derives distance/duration for every cardio
+// exercise still carrying its original import notes, regardless of current exercise_type,
+// since backfillCardioExercises already reclassified everything to 'cardio' by the time
+// this runs.
+function fixCardioDistanceRegexBug(db: Database): void {
+  const candidates = db
+    .query<LegacyCardioExerciseRow, []>(
+      "SELECT id, name, exercise_type, notes FROM workout_exercises WHERE exercise_type = 'cardio' AND notes LIKE 'Imported from workout export%'"
+    )
+    .all();
+  if (candidates.length === 0) return;
+
+  const updateSet = db.query("UPDATE workout_sets SET distance_miles = ?, duration_seconds = ? WHERE id = ?");
+  const setsForExercise = db.query<{ id: string }, [string]>("SELECT id FROM workout_sets WHERE exercise_id = ?");
+
+  for (const ex of candidates) {
+    const { distance, duration } = parseCardioNotes(ex.notes);
     for (const row of setsForExercise.all(ex.id)) {
       updateSet.run(distance, duration, row.id);
     }
