@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, NOTES_UNLOCK_KEY, type Note, type NoteImage } from "../api/client";
+import { api, isNotesUnlockStale, NOTES_UNLOCK_KEY, type Note, type NoteImage } from "../api/client";
 
 function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -59,6 +59,23 @@ export default function NoteEditor() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // A locked note that's currently unlocked and on screen should re-gate itself once the
+  // 5-minute idle clock lapses, not just wait for the next request to happen to fail —
+  // otherwise a note left open (but untouched) would keep showing its content
+  // indefinitely. Only runs at all for locked notes; nothing to re-gate otherwise.
+  useEffect(() => {
+    if (!id || !note || note.requires_unlock || !note.locked) return;
+    const interval = setInterval(() => {
+      if (!isNotesUnlockStale()) return;
+      sessionStorage.removeItem(NOTES_UNLOCK_KEY);
+      if (titleRef.current !== savedTitleRef.current || bodyRef.current !== savedBodyRef.current) {
+        api.updateNote(id, { title: titleRef.current, body: bodyRef.current }).catch(() => {});
+      }
+      load(id);
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [id, note?.locked, note?.requires_unlock]);
 
   async function load(noteId: string) {
     setLoading(true);

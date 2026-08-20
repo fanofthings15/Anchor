@@ -17,8 +17,32 @@ function reauthRedirectDetected() {
 }
 
 export const NOTES_UNLOCK_KEY = "anchor-notes-unlock";
+const NOTES_LAST_ACTIVITY_KEY = "anchor-notes-last-activity";
+const NOTES_INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000;
+
+// Throttled to avoid a sessionStorage write on every scroll/mousemove tick — activity
+// tracking only needs roughly-current, not exact-to-the-millisecond.
+let lastActivityWrite = 0;
+export function recordNotesActivity() {
+  const now = Date.now();
+  if (now - lastActivityWrite < 1000) return;
+  lastActivityWrite = now;
+  sessionStorage.setItem(NOTES_LAST_ACTIVITY_KEY, String(now));
+}
+
+// Deliberately NOT gated on whether an unlock token currently exists — a note locked
+// just now, in this same view, has visible content on screen with no token to expire
+// (locking doesn't require a PIN-proven token in the first place), so this has to answer
+// "has it been idle too long" on its own, independent of token bookkeeping. Exported so
+// pages holding locked-note content on screen can proactively re-gate themselves on a
+// timer, not just fail the next request that happens to fire.
+export function isNotesUnlockStale(): boolean {
+  const last = Number(sessionStorage.getItem(NOTES_LAST_ACTIVITY_KEY) ?? 0);
+  return Date.now() - last > NOTES_INACTIVITY_TIMEOUT_MS;
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  if (isNotesUnlockStale()) sessionStorage.removeItem(NOTES_UNLOCK_KEY);
   const unlockToken = sessionStorage.getItem(NOTES_UNLOCK_KEY);
   const res = await fetch(`/api${path}`, {
     ...init,

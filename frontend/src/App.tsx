@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
+import { recordNotesActivity } from "./api/client";
 import Nav from "./components/Nav";
 import Today from "./pages/Today";
 import Notes from "./pages/Notes";
@@ -13,6 +15,16 @@ import Workouts from "./pages/Workouts";
 import Settings from "./pages/Settings";
 
 export default function App() {
+  // Any interaction anywhere in the app counts as activity, not just within Notes —
+  // resets the 5-minute idle clock that locked notes re-gate against (see
+  // isNotesUnlockStale in api/client.ts).
+  useEffect(() => {
+    const events: (keyof WindowEventMap)[] = ["mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((e) => window.addEventListener(e, recordNotesActivity, { passive: true }));
+    recordNotesActivity();
+    return () => events.forEach((e) => window.removeEventListener(e, recordNotesActivity));
+  }, []);
+
   return (
     <div className="app">
       <Nav />

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { api, type Note } from "../api/client";
+import { api, isNotesUnlockStale, type Note } from "../api/client";
 
 function DragHandle(props: Record<string, unknown>) {
   return (
@@ -119,6 +119,18 @@ export default function Notes() {
   useEffect(() => {
     load();
   }, []);
+
+  // Previews for locked notes were already redacted server-side at fetch time (see
+  // notes.ts's serialize), but that redaction only applies per-request — sitting on this
+  // list past the 5-minute idle window shouldn't leave an already-loaded preview visible
+  // indefinitely, so re-fetch once the clock lapses to pick up the re-redacted version.
+  useEffect(() => {
+    if (!notes.some((n) => n.locked)) return;
+    const interval = setInterval(() => {
+      if (isNotesUnlockStale()) load();
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [notes]);
 
   async function load() {
     setLoading(true);
