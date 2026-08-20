@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/client";
+import { api, NOTES_UNLOCK_KEY } from "../api/client";
 
 export default function Settings() {
   const [loading, setLoading] = useState(true);
@@ -10,6 +10,12 @@ export default function Settings() {
   const [fatTarget, setFatTarget] = useState("");
   const [goalWeight, setGoalWeight] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  const [hasNotesPin, setHasNotesPin] = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
 
   useEffect(() => {
     load();
@@ -24,6 +30,7 @@ export default function Settings() {
       setCarbsTarget(s.carbs_target_g != null ? String(s.carbs_target_g) : "");
       setFatTarget(s.fat_target_g != null ? String(s.fat_target_g) : "");
       setGoalWeight(s.goal_weight_lbs != null ? String(s.goal_weight_lbs) : "");
+      setHasNotesPin(s.has_notes_pin);
       setTheme(s.theme);
     } finally {
       setLoading(false);
@@ -50,6 +57,41 @@ export default function Settings() {
       setTheme(updated.theme);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function savePin(e: React.FormEvent) {
+    e.preventDefault();
+    setPinError("");
+    if (!/^\d{4}$/.test(pinValue)) {
+      setPinError("PIN must be exactly 4 digits");
+      return;
+    }
+    if (pinValue !== pinConfirm) {
+      setPinError("PINs don't match");
+      return;
+    }
+    setPinSaving(true);
+    try {
+      const updated = await api.setNotesPin(pinValue);
+      setHasNotesPin(updated.has_notes_pin);
+      setPinValue("");
+      setPinConfirm("");
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : "Failed to save PIN");
+    } finally {
+      setPinSaving(false);
+    }
+  }
+
+  async function clearPin() {
+    setPinSaving(true);
+    try {
+      const updated = await api.clearNotesPin();
+      setHasNotesPin(updated.has_notes_pin);
+      sessionStorage.removeItem(NOTES_UNLOCK_KEY);
+    } finally {
+      setPinSaving(false);
     }
   }
 
@@ -127,6 +169,49 @@ export default function Settings() {
         <div className="form-actions">
           <button className="btn btn-primary" type="submit" disabled={saving}>
             {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </form>
+
+      <h2 style={{ marginTop: 24 }}>Notes PIN</h2>
+      <form className="card" onSubmit={savePin}>
+        <div className="field">
+          <label htmlFor="notes-pin">{hasNotesPin ? "Change PIN" : "Set a 4-digit PIN"}</label>
+          <input
+            id="notes-pin"
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={pinValue}
+            onChange={(e) => setPinValue(e.target.value.replace(/\D/g, ""))}
+            placeholder="••••"
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="notes-pin-confirm">Confirm PIN</label>
+          <input
+            id="notes-pin-confirm"
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            value={pinConfirm}
+            onChange={(e) => setPinConfirm(e.target.value.replace(/\D/g, ""))}
+            placeholder="••••"
+          />
+        </div>
+        {pinError && (
+          <div className="text-danger" style={{ fontSize: 13, marginBottom: 10 }}>
+            {pinError}
+          </div>
+        )}
+        <div className="form-actions">
+          {hasNotesPin && (
+            <button type="button" className="btn text-danger" onClick={clearPin} disabled={pinSaving}>
+              Clear PIN
+            </button>
+          )}
+          <button className="btn btn-primary" type="submit" disabled={pinSaving}>
+            {pinSaving ? "Saving…" : hasNotesPin ? "Change PIN" : "Set PIN"}
           </button>
         </div>
       </form>

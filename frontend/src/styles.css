@@ -730,3 +730,23 @@ button {
   border-radius: var(--radius-sm);
   object-fit: contain;
 }
+
+.note-card {
+  cursor: pointer;
+}
+
+.pin-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 16px;
+}
+
+.pin-gate-input {
+  width: 140px;
+  text-align: center;
+  font-size: 24px;
+  letter-spacing: 8px;
+  margin: 16px 0;
+}

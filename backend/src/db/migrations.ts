@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS notes (
   body TEXT NOT NULL DEFAULT '',
   tags TEXT NOT NULL DEFAULT '[]',
   pinned INTEGER NOT NULL DEFAULT 0,
+  locked INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -240,6 +242,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   goal_weight_lbs REAL,
   api_token_hash TEXT,
   api_token_created_at TEXT,
+  notes_pin_hash TEXT,
   theme TEXT NOT NULL DEFAULT 'dark'
 );
 
@@ -332,7 +335,30 @@ CREATE TABLE IF NOT EXISTS migration_flags (
   if (!tableColumns(db, "user_settings").includes("api_token_hash")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN api_token_hash TEXT");
     db.exec("ALTER TABLE user_settings ADD COLUMN api_token_created_at TEXT");
-    db.exec("CREATE INDEX IF NOT EXISTS idx_user_settings_api_token_hash ON user_settings(api_token_hash)");
+  }
+  // Unconditional (not inside the guard above) so it also runs on a fresh install, where
+  // the column already exists via CREATE TABLE and the guard above is skipped entirely —
+  // an index nested inside that guard would only ever get created for upgraded DBs.
+  db.exec("CREATE INDEX IF NOT EXISTS idx_user_settings_api_token_hash ON user_settings(api_token_hash)");
+
+  if (!tableColumns(db, "user_settings").includes("notes_pin_hash")) {
+    db.exec("ALTER TABLE user_settings ADD COLUMN notes_pin_hash TEXT");
+  }
+
+  // locked / sort_order were added to `notes` after the initial schema (per-note PIN
+  // lock + drag-to-reorder) — backfill for any DB from before either existed. No-ops on
+  // a fresh install, since the CREATE TABLE above already includes both columns there.
+  if (!tableColumns(db, "notes").includes("locked")) {
+    db.exec("ALTER TABLE notes ADD COLUMN locked INTEGER NOT NULL DEFAULT 0");
+  }
+  if (!tableColumns(db, "notes").includes("sort_order")) {
+    db.exec("ALTER TABLE notes ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0");
+    db.exec(`
+      UPDATE notes SET sort_order = (
+        SELECT COUNT(*) FROM notes n2
+        WHERE n2.user_id = notes.user_id AND n2.pinned = notes.pinned AND n2.updated_at < notes.updated_at
+      )
+    `);
   }
 
   // The first shipped version of the distance-parsing regex (`/mi/` with no boundary)

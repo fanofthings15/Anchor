@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type Note, type NoteImage } from "../api/client";
+import { api, NOTES_UNLOCK_KEY, type Note, type NoteImage } from "../api/client";
 
 function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -29,6 +29,10 @@ export default function NoteEditor() {
   const [newTag, setNewTag] = useState("");
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
+  const [hasNotesPin, setHasNotesPin] = useState(false);
+  const [unlockPin, setUnlockPin] = useState("");
+  const [unlockError, setUnlockError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
 
   // Latest values escape the render closure via refs so the unmount-time flush (browser
   // back, nav-link tap, etc. — none of which necessarily blur the field first) always
@@ -44,7 +48,9 @@ export default function NoteEditor() {
     if (!id) return;
     load(id);
     // Flush any unsaved edit when navigating away — covers back/nav-tap, which don't
-    // fire a textarea blur the way clicking another control on the same page does.
+    // fire a textarea blur the way clicking another control on the same page does. A
+    // still-locked note (gated screen, nothing to flush) never populated these refs
+    // beyond their initial empty state, so this is a no-op there.
     return () => {
       if (titleRef.current !== savedTitleRef.current || bodyRef.current !== savedBodyRef.current) {
         api.updateNote(id, { title: titleRef.current, body: bodyRef.current }).catch(() => {});
@@ -56,15 +62,35 @@ export default function NoteEditor() {
   async function load(noteId: string) {
     setLoading(true);
     try {
-      const [n, imgs] = await Promise.all([api.getNote(noteId), api.listNoteImages(noteId)]);
+      const [n, settings] = await Promise.all([api.getNote(noteId), api.getSettings()]);
       setNote(n);
-      setTitle(n.title);
-      setBody(n.body);
-      savedTitleRef.current = n.title;
-      savedBodyRef.current = n.body;
-      setImages(imgs);
+      setHasNotesPin(settings.has_notes_pin);
+      if (!n.requires_unlock) {
+        setTitle(n.title);
+        setBody(n.body);
+        savedTitleRef.current = n.title;
+        savedBodyRef.current = n.body;
+        setImages(await api.listNoteImages(noteId));
+      }
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    if (!id) return;
+    setUnlockError("");
+    setUnlocking(true);
+    try {
+      const { token } = await api.unlockNotes(unlockPin);
+      sessionStorage.setItem(NOTES_UNLOCK_KEY, token);
+      setUnlockPin("");
+      await load(id);
+    } catch (err) {
+      setUnlockError(err instanceof Error ? err.message : "Incorrect PIN");
+    } finally {
+      setUnlocking(false);
     }
   }
 
@@ -87,6 +113,12 @@ export default function NoteEditor() {
   async function togglePin() {
     if (!id || !note) return;
     const updated = await api.updateNote(id, { pinned: !note.pinned });
+    setNote(updated);
+  }
+
+  async function toggleLock() {
+    if (!id || !note) return;
+    const updated = await api.updateNote(id, { locked: !note.locked });
     setNote(updated);
   }
 
@@ -148,6 +180,43 @@ export default function NoteEditor() {
     );
   }
 
+  if (note.requires_unlock) {
+    return (
+      <div>
+        <div className="row-between" style={{ marginBottom: 16 }}>
+          <button type="button" className="btn-icon" onClick={() => navigate("/notes")} aria-label="Back to notes">
+            ←
+          </button>
+        </div>
+        <form className="pin-gate" onSubmit={handleUnlock}>
+          <div style={{ fontSize: 32 }}>🔒</div>
+          <strong style={{ marginTop: 8 }}>{note.title}</strong>
+          <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>
+            This note is locked — enter your PIN to view it.
+          </div>
+          <input
+            type="password"
+            inputMode="numeric"
+            maxLength={4}
+            className="pin-gate-input"
+            value={unlockPin}
+            onChange={(e) => setUnlockPin(e.target.value.replace(/\D/g, ""))}
+            placeholder="••••"
+            autoFocus
+          />
+          {unlockError && (
+            <div className="text-danger" style={{ fontSize: 13, marginBottom: 8 }}>
+              {unlockError}
+            </div>
+          )}
+          <button className="btn btn-primary" type="submit" disabled={unlocking || unlockPin.length !== 4}>
+            {unlocking ? "Checking…" : "Unlock"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="note-editor">
       <div className="row-between" style={{ marginBottom: 12 }}>
@@ -155,6 +224,16 @@ export default function NoteEditor() {
           ←
         </button>
         <div className="row" style={{ gap: 4 }}>
+          <button
+            type="button"
+            className="btn-icon"
+            onClick={toggleLock}
+            disabled={!hasNotesPin && !note.locked}
+            aria-label={note.locked ? "Unlock note" : "Lock note"}
+            title={!hasNotesPin && !note.locked ? "Set a PIN in Settings to lock notes" : undefined}
+          >
+            {note.locked ? "🔒" : "🔓"}
+          </button>
           <button
             type="button"
             className="btn-icon"

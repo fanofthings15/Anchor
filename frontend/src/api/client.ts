@@ -16,11 +16,18 @@ function reauthRedirectDetected() {
   window.location.reload();
 }
 
+export const NOTES_UNLOCK_KEY = "anchor-notes-unlock";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const unlockToken = sessionStorage.getItem(NOTES_UNLOCK_KEY);
   const res = await fetch(`/api${path}`, {
     ...init,
     redirect: "manual",
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      ...(unlockToken ? { "X-notes-unlock": unlockToken } : {}),
+      ...init?.headers,
+    },
   });
   if (res.type === "opaqueredirect") {
     reauthRedirectDetected();
@@ -42,6 +49,8 @@ export interface Note {
   body: string;
   tags: string[];
   pinned: boolean;
+  locked: boolean;
+  requires_unlock: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -227,6 +236,7 @@ export interface UserSettings {
   carbs_target_g: number | null;
   fat_target_g: number | null;
   goal_weight_lbs: number | null;
+  has_notes_pin: boolean;
   theme: "dark" | "light";
 }
 
@@ -243,9 +253,12 @@ export const api = {
   getNote: (id: string) => request<Note>(`/notes/${id}`),
   createNote: (data: { title: string; body?: string; tags?: string[] }) =>
     request<Note>("/notes", { method: "POST", body: JSON.stringify(data) }),
-  updateNote: (id: string, data: Partial<Pick<Note, "title" | "body" | "tags" | "pinned">>) =>
+  updateNote: (id: string, data: Partial<Pick<Note, "title" | "body" | "tags" | "pinned" | "locked">>) =>
     request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteNote: (id: string) => request<{ ok: true }>(`/notes/${id}`, { method: "DELETE" }),
+  reorderNotes: (orderedIds: string[]) =>
+    request<Note[]>("/notes/reorder", { method: "PATCH", body: JSON.stringify({ ordered_ids: orderedIds }) }),
+  unlockNotes: (pin: string) => request<{ token: string }>("/notes/unlock", { method: "POST", body: JSON.stringify({ pin }) }),
 
   // Note images (pasted screenshots/photos attached to a note)
   listNoteImages: (noteId: string) => request<NoteImage[]>(`/notes/${noteId}/images`),
@@ -430,6 +443,9 @@ export const api = {
   getSettings: () => request<UserSettings>("/settings"),
   updateSettings: (data: Partial<UserSettings>) =>
     request<UserSettings>("/settings", { method: "PATCH", body: JSON.stringify(data) }),
+  setNotesPin: (pin: string) =>
+    request<{ has_notes_pin: boolean }>("/settings/notes-pin", { method: "POST", body: JSON.stringify({ pin }) }),
+  clearNotesPin: () => request<{ has_notes_pin: boolean }>("/settings/notes-pin", { method: "DELETE" }),
 
   // Today dashboard
   getToday: () => request<TodayResponse>("/today"),
