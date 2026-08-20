@@ -7,7 +7,14 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      injectRegister: "auto",
+      // Registration is done manually from main.tsx via the virtual:pwa-register
+      // module instead of the auto-injected script tag, so we can force an
+      // already-open tab to reload the instant a new service worker takes
+      // control. Without this, skipWaiting()/clientsClaim() (below) let a new SW
+      // activate silently while an open tab keeps running its old JS bundle
+      // against the current API — a version-skew mismatch that can crash the
+      // whole render tree with nothing telling the user to reload.
+      injectRegister: null,
       // manifest.json is already hand-maintained in public/ and linked from index.html,
       // with its own Traefik+app-level auth exemption (see backend's PUBLIC_ASSET_NAMES
       // and Home-Wiki's coolify-anchor-static-assets router) — letting this plugin

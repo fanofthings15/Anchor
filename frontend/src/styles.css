@@ -72,6 +72,28 @@ a {
   margin-bottom: 16px;
 }
 
+.crash-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 60vh;
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.crash-screen button {
+  background: var(--accent);
+  color: #0f1115;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 /* ---------- Nav: mobile bottom tab bar by default ---------- */
 
 .app-nav {
