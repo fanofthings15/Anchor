@@ -27,7 +27,9 @@ export default function Settings() {
   const [googleConfigured, setGoogleConfigured] = useState(true);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleResult, setGoogleResult] = useState<"connected" | "error" | null>(null);
-  const [googleCalendars, setGoogleCalendars] = useState<{ id: string; name: string; primary: boolean; selected: boolean }[]>([]);
+  const [googleCalendars, setGoogleCalendars] = useState<
+    { id: string; name: string; primary: boolean; color: string | null; selected: boolean }[]
+  >([]);
   const [googleCalendarsLoading, setGoogleCalendarsLoading] = useState(false);
   const [googleCalendarsSaving, setGoogleCalendarsSaving] = useState(false);
 
@@ -468,6 +470,15 @@ export default function Settings() {
                       checked={c.selected}
                       onChange={() => toggleGoogleCalendar(c.id)}
                       disabled={googleCalendarsSaving}
+                    />
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        background: c.color ?? "var(--text-dim)",
+                        flexShrink: 0,
+                      }}
                     />
                     <span>
                       {c.name}

@@ -238,11 +238,10 @@ export default function Calendar() {
                 <div className="calendar-date">{cell.date.getDate()}</div>
                 <div className="calendar-events">
                   {shownEvents.map((ev) => (
-                    <div
-                      className={`calendar-event${ev.source === "google" ? " calendar-event-google" : ""}`}
-                      key={ev.id}
-                      title={ev.title}
-                    >
+                    <div className="calendar-event" key={ev.id} title={ev.title}>
+                      {ev.source === "google" && (
+                        <span className="calendar-event-dot" style={{ background: ev.color ?? "var(--accent)" }} />
+                      )}
                       {!ev.all_day && <span className="calendar-event-time">{formatShortTime(ev.start_at)} </span>}
                       {ev.title}
                     </div>
@@ -282,7 +281,14 @@ export default function Calendar() {
                       <div className="row" style={{ flexWrap: "wrap" }}>
                         <span className="chip">{ev.all_day ? "All day" : formatTime(ev.start_at)}</span>
                         {!ev.all_day && ev.end_at && <span className="text-dim">– {formatTime(ev.end_at)}</span>}
-                        {ev.source === "google" && <span className="chip chip-accent">Google Calendar</span>}
+                        {ev.source === "google" && (
+                          <span
+                            className="chip"
+                            style={{ borderColor: ev.color ?? "var(--accent-dim)", color: ev.color ?? "var(--accent)" }}
+                          >
+                            Google Calendar
+                          </span>
+                        )}
                       </div>
                       <div style={{ marginTop: 6 }}>
                         <strong>{ev.title}</strong>

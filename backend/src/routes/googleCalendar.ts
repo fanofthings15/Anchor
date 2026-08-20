@@ -68,6 +68,32 @@ interface GoogleCalendarListEntry {
   id: string;
   summary: string;
   primary?: boolean;
+  backgroundColor?: string;
+}
+
+// Fetches the account's calendarList once and returns just the id -> hex color mapping —
+// shared by /calendars (to show a swatch next to each option) and /events (to tag each
+// pulled-in event with its source calendar's color).
+async function fetchCalendarColors(accessToken: string): Promise<Map<string, string>> {
+  const colors = new Map<string, string>();
+  try {
+    const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!listRes.ok) return colors;
+    const data = (await listRes.json()) as { items?: GoogleCalendarListEntry[] };
+    for (const item of data.items ?? []) {
+      if (!item.backgroundColor) continue;
+      colors.set(item.id, item.backgroundColor);
+      // The events endpoint (and this app's stored selection) refers to the account's own
+      // calendar by the literal alias "primary", but calendarList always lists it under
+      // its real id (the account's email) — mirror the color under both keys.
+      if (item.primary) colors.set("primary", item.backgroundColor);
+    }
+  } catch {
+    // best-effort — events still render fine without a color, just with the default
+  }
+  return colors;
 }
 
 // GET /api/calendar/google/calendars — every calendar this Google account can see
@@ -101,6 +127,7 @@ googleCalendarRouter.get("/calendars", async (req, res) => {
       id: item.id,
       name: item.summary,
       primary: !!item.primary,
+      color: item.backgroundColor ?? null,
       selected: selected.has(item.id) || (item.primary && selected.has("primary")),
     }));
     res.json(calendars);
@@ -281,8 +308,10 @@ googleCalendarRouter.get("/events", async (req, res) => {
     .get(req.uid);
   const calendarIds = row ? getSelectedCalendarIds(row) : ["primary"];
   try {
+    const colors = await fetchCalendarColors(accessToken);
     const perCalendar = await Promise.all(
       calendarIds.map(async (calendarId) => {
+        const color = colors.get(calendarId) ?? null;
         const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
         url.searchParams.set("timeMin", new Date(from).toISOString());
         url.searchParams.set("timeMax", new Date(to).toISOString());
@@ -311,6 +340,7 @@ googleCalendarRouter.get("/events", async (req, res) => {
           all_day: !item.start?.dateTime,
           location: item.location ?? "",
           source: "google" as const,
+          color,
         }));
       })
     );

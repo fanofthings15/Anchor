@@ -144,6 +144,9 @@ export interface CalendarEvent {
   // Present (and "google") only on events read in from a connected Google Calendar —
   // those are display-only imports, never editable/deletable from this app.
   source?: "google";
+  // The source Google calendar's own color (hex), when known — lets a friend's shared
+  // calendar visually stand apart from the user's own. Absent for Anchor's own events.
+  color?: string | null;
 }
 
 export interface Bill {
@@ -368,7 +371,9 @@ export const api = {
     request<CalendarEvent[]>(`/calendar/google/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   disconnectGoogleCalendar: () => request<{ connected: false }>("/calendar/google/disconnect", { method: "DELETE" }),
   listGoogleCalendars: () =>
-    request<{ id: string; name: string; primary: boolean; selected: boolean }[]>("/calendar/google/calendars"),
+    request<{ id: string; name: string; primary: boolean; color: string | null; selected: boolean }[]>(
+      "/calendar/google/calendars"
+    ),
   updateGoogleCalendars: (calendarIds: string[]) =>
     request<{ calendar_ids: string[] }>("/calendar/google/calendars", {
       method: "PATCH",
