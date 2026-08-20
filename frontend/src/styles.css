@@ -62,6 +62,16 @@ a {
   width: 100%;
 }
 
+.offline-banner {
+  background: rgba(224, 168, 62, 0.15);
+  border: 1px solid var(--warning);
+  color: var(--warning);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
 /* ---------- Nav: mobile bottom tab bar by default ---------- */
 
 .app-nav {
