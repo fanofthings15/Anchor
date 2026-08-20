@@ -33,6 +33,7 @@ export default function NoteEditor() {
   const [unlockPin, setUnlockPin] = useState("");
   const [unlockError, setUnlockError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Latest values escape the render closure via refs so the unmount-time flush (browser
   // back, nav-link tap, etc. — none of which necessarily blur the field first) always
@@ -242,9 +243,32 @@ export default function NoteEditor() {
           >
             {note.pinned ? "★" : "☆"}
           </button>
-          <button type="button" className="btn-icon text-danger" onClick={remove} aria-label="Delete note">
-            ✕
-          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="btn-icon text-danger"
+              onClick={() => setConfirmingDelete((v) => !v)}
+              aria-label="Delete note"
+            >
+              ✕
+            </button>
+            {confirmingDelete && (
+              <>
+                <div className="confirm-menu-backdrop" onClick={() => setConfirmingDelete(false)} />
+                <div className="confirm-menu">
+                  <div className="confirm-menu-text">Delete this note?</div>
+                  <div className="row" style={{ gap: 8 }}>
+                    <button type="button" className="btn" onClick={() => setConfirmingDelete(false)}>
+                      Cancel
+                    </button>
+                    <button type="button" className="btn btn-danger" onClick={remove}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

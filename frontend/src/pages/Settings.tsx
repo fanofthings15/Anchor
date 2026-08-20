@@ -12,6 +12,7 @@ export default function Settings() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const [hasNotesPin, setHasNotesPin] = useState(false);
+  const [currentPin, setCurrentPin] = useState("");
   const [pinValue, setPinValue] = useState("");
   const [pinConfirm, setPinConfirm] = useState("");
   const [pinError, setPinError] = useState("");
@@ -63,18 +64,23 @@ export default function Settings() {
   async function savePin(e: React.FormEvent) {
     e.preventDefault();
     setPinError("");
+    if (hasNotesPin && !/^\d{4}$/.test(currentPin)) {
+      setPinError("Enter your current PIN");
+      return;
+    }
     if (!/^\d{4}$/.test(pinValue)) {
-      setPinError("PIN must be exactly 4 digits");
+      setPinError("New PIN must be exactly 4 digits");
       return;
     }
     if (pinValue !== pinConfirm) {
-      setPinError("PINs don't match");
+      setPinError("New PINs don't match");
       return;
     }
     setPinSaving(true);
     try {
-      const updated = await api.setNotesPin(pinValue);
+      const updated = await api.setNotesPin(pinValue, hasNotesPin ? currentPin : undefined);
       setHasNotesPin(updated.has_notes_pin);
+      setCurrentPin("");
       setPinValue("");
       setPinConfirm("");
     } catch (err) {
@@ -85,11 +91,19 @@ export default function Settings() {
   }
 
   async function clearPin() {
+    setPinError("");
+    if (!/^\d{4}$/.test(currentPin)) {
+      setPinError("Enter your current PIN to clear it");
+      return;
+    }
     setPinSaving(true);
     try {
-      const updated = await api.clearNotesPin();
+      const updated = await api.clearNotesPin(currentPin);
       setHasNotesPin(updated.has_notes_pin);
+      setCurrentPin("");
       sessionStorage.removeItem(NOTES_UNLOCK_KEY);
+    } catch (err) {
+      setPinError(err instanceof Error ? err.message : "Failed to clear PIN");
     } finally {
       setPinSaving(false);
     }
@@ -175,8 +189,22 @@ export default function Settings() {
 
       <h2 style={{ marginTop: 24 }}>Notes PIN</h2>
       <form className="card" onSubmit={savePin}>
+        {hasNotesPin && (
+          <div className="field">
+            <label htmlFor="notes-pin-current">Current PIN</label>
+            <input
+              id="notes-pin-current"
+              type="password"
+              inputMode="numeric"
+              maxLength={4}
+              value={currentPin}
+              onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+              placeholder="••••"
+            />
+          </div>
+        )}
         <div className="field">
-          <label htmlFor="notes-pin">{hasNotesPin ? "Change PIN" : "Set a 4-digit PIN"}</label>
+          <label htmlFor="notes-pin">{hasNotesPin ? "New PIN" : "Set a 4-digit PIN"}</label>
           <input
             id="notes-pin"
             type="password"
@@ -188,7 +216,7 @@ export default function Settings() {
           />
         </div>
         <div className="field">
-          <label htmlFor="notes-pin-confirm">Confirm PIN</label>
+          <label htmlFor="notes-pin-confirm">Confirm {hasNotesPin ? "New " : ""}PIN</label>
           <input
             id="notes-pin-confirm"
             type="password"

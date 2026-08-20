@@ -443,9 +443,16 @@ export const api = {
   getSettings: () => request<UserSettings>("/settings"),
   updateSettings: (data: Partial<UserSettings>) =>
     request<UserSettings>("/settings", { method: "PATCH", body: JSON.stringify(data) }),
-  setNotesPin: (pin: string) =>
-    request<{ has_notes_pin: boolean }>("/settings/notes-pin", { method: "POST", body: JSON.stringify({ pin }) }),
-  clearNotesPin: () => request<{ has_notes_pin: boolean }>("/settings/notes-pin", { method: "DELETE" }),
+  setNotesPin: (pin: string, currentPin?: string) =>
+    request<{ has_notes_pin: boolean }>("/settings/notes-pin", {
+      method: "POST",
+      body: JSON.stringify({ pin, current_pin: currentPin }),
+    }),
+  clearNotesPin: (currentPin: string) =>
+    request<{ has_notes_pin: boolean }>("/settings/notes-pin", {
+      method: "DELETE",
+      body: JSON.stringify({ current_pin: currentPin }),
+    }),
 
   // Today dashboard
   getToday: () => request<TodayResponse>("/today"),

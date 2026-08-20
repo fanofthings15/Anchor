@@ -307,6 +307,7 @@ input[type="number"],
 input[type="date"],
 input[type="datetime-local"],
 input[type="time"],
+input[type="password"],
 select,
 textarea {
   background: var(--bg-raised);
@@ -749,4 +750,30 @@ button {
   font-size: 24px;
   letter-spacing: 8px;
   margin: 16px 0;
+}
+
+/* Custom in-app confirmation popover (deleting a note) — never the native
+   window.confirm(), which can't be themed and looks jarring against the dark UI. */
+.confirm-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.confirm-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 51;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  width: 200px;
+}
+
+.confirm-menu-text {
+  font-size: 13px;
+  margin-bottom: 10px;
 }

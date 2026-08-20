@@ -75,14 +75,24 @@ settingsRouter.patch("/", (req, res) => {
   res.json({ ...next, has_notes_pin: base.has_notes_pin });
 });
 
-// Set or change the notes PIN — a plain 4-digit code, stored only as a hash. Upserts the
-// user_settings row since a brand-new user may not have one yet (same pattern as the
-// main PATCH above).
+// Set or change the notes PIN — a plain 4-digit code, stored only as a hash. Changing an
+// existing PIN requires the current one (otherwise anyone with the phone unlocked to the
+// Settings page — exactly who the PIN is meant to keep out — could just set a new one
+// and read every locked note). Setting one for the first time needs no current_pin.
 settingsRouter.post("/notes-pin", (req, res) => {
-  const { pin } = req.body ?? {};
+  const { pin, current_pin } = req.body ?? {};
   if (typeof pin !== "string" || !/^\d{4}$/.test(pin)) {
     res.status(400).json({ error: "pin must be exactly 4 digits" });
     return;
+  }
+  const existing = db
+    .query<{ notes_pin_hash: string | null }, [string]>("SELECT notes_pin_hash FROM user_settings WHERE user_id = ?")
+    .get(req.uid);
+  if (existing?.notes_pin_hash) {
+    if (typeof current_pin !== "string" || hashPin(current_pin) !== existing.notes_pin_hash) {
+      res.status(401).json({ error: "current PIN is incorrect" });
+      return;
+    }
   }
   db.query(
     `INSERT INTO user_settings (user_id, notes_pin_hash) VALUES (?, ?)
@@ -92,8 +102,20 @@ settingsRouter.post("/notes-pin", (req, res) => {
 });
 
 // Clearing the PIN also unlocks every note — otherwise they'd be permanently stuck
-// behind a PIN that no longer exists to unlock them with.
+// behind a PIN that no longer exists to unlock them with. Requires the current PIN for
+// the same reason changing it does: without that, the PIN protects nothing, since anyone
+// with the phone open to Settings could just clear it and read every locked note.
 settingsRouter.delete("/notes-pin", (req, res) => {
+  const { current_pin } = req.body ?? {};
+  const existing = db
+    .query<{ notes_pin_hash: string | null }, [string]>("SELECT notes_pin_hash FROM user_settings WHERE user_id = ?")
+    .get(req.uid);
+  if (existing?.notes_pin_hash) {
+    if (typeof current_pin !== "string" || hashPin(current_pin) !== existing.notes_pin_hash) {
+      res.status(401).json({ error: "current PIN is incorrect" });
+      return;
+    }
+  }
   db.query("UPDATE user_settings SET notes_pin_hash = NULL WHERE user_id = ?").run(req.uid);
   db.query("UPDATE notes SET locked = 0 WHERE user_id = ?").run(req.uid);
   res.json({ has_notes_pin: false });

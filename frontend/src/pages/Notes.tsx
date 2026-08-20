@@ -23,12 +23,10 @@ function SortableNoteCard({
   note,
   onOpen,
   onTogglePin,
-  onDelete,
 }: {
   note: Note;
   onOpen: () => void;
   onTogglePin: () => void;
-  onDelete: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: note.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 };
@@ -52,17 +50,6 @@ function SortableNoteCard({
           aria-label="Toggle pin"
         >
           {note.pinned ? "★" : "☆"}
-        </button>
-        <button
-          type="button"
-          className="btn-icon text-danger"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          aria-label="Delete note"
-        >
-          ✕
         </button>
       </div>
       {!note.locked && note.body.trim() && (
@@ -88,13 +75,11 @@ function NoteGroup({
   onReorder,
   onOpen,
   onTogglePin,
-  onDelete,
 }: {
   notes: Note[];
   onReorder: (ids: string[]) => void;
   onOpen: (id: string) => void;
   onTogglePin: (note: Note) => void;
-  onDelete: (id: string) => void;
 }) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -117,7 +102,6 @@ function NoteGroup({
               note={note}
               onOpen={() => onOpen(note.id)}
               onTogglePin={() => onTogglePin(note)}
-              onDelete={() => onDelete(note.id)}
             />
           ))}
         </div>
@@ -157,11 +141,6 @@ export default function Notes() {
   async function togglePin(note: Note) {
     const updated = await api.updateNote(note.id, { pinned: !note.pinned });
     setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)));
-  }
-
-  async function remove(id: string) {
-    await api.deleteNote(id);
-    setNotes((prev) => prev.filter((n) => n.id !== id));
   }
 
   async function reorder(group: "pinned" | "unpinned", orderedIds: string[]) {
@@ -207,7 +186,6 @@ export default function Notes() {
               onReorder={(ids) => reorder("pinned", ids)}
               onOpen={(id) => navigate(`/notes/${id}`)}
               onTogglePin={togglePin}
-              onDelete={remove}
             />
           )}
           <NoteGroup
@@ -215,7 +193,6 @@ export default function Notes() {
             onReorder={(ids) => reorder("unpinned", ids)}
             onOpen={(id) => navigate(`/notes/${id}`)}
             onTogglePin={togglePin}
-            onDelete={remove}
           />
         </>
       )}
