@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type CalendarEvent } from "../api/client";
+import { api, type CalendarEvent, type RecurringTask } from "../api/client";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_EVENTS_PER_CELL = 3;
+
+function taskIcon(category: RecurringTask["category"]): string {
+  return category === "cleaning" ? "🧹" : "🔧";
+}
 
 interface DayCell {
   date: Date;
@@ -57,6 +61,7 @@ function formatShortTime(iso: string): string {
 export default function Calendar() {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
+  const [tasks, setTasks] = useState<RecurringTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -78,6 +83,14 @@ export default function Calendar() {
     load();
   }, [year, month]);
 
+  // Recurring cleaning/maintenance tasks aren't range-scoped like events — each one just
+  // carries a single next_due_at, and the full list is small for a personal app — so it's
+  // loaded once (and again after "mark done" shifts a task's due date) rather than
+  // refetched on every month change.
+  useEffect(() => {
+    loadTasks();
+  }, []);
+
   async function load() {
     setLoading(true);
     try {
@@ -87,6 +100,10 @@ export default function Calendar() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadTasks() {
+    setTasks(await api.listRecurringTasks());
   }
 
   const eventsByDay = useMemo(() => {
@@ -102,7 +119,23 @@ export default function Calendar() {
     return map;
   }, [events]);
 
+  const tasksByDay = useMemo(() => {
+    const map = new Map<string, RecurringTask[]>();
+    for (const t of tasks) {
+      const key = new Date(t.next_due_at).toDateString();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(t);
+    }
+    return map;
+  }, [tasks]);
+
   const selectedDayEvents = selectedDate ? eventsByDay.get(selectedDate.toDateString()) ?? [] : [];
+  const selectedDayTasks = selectedDate ? tasksByDay.get(selectedDate.toDateString()) ?? [] : [];
+
+  async function completeTask(id: string) {
+    await api.completeRecurringTask(id);
+    loadTasks();
+  }
 
   function goToMonth(delta: number) {
     setViewDate(new Date(year, month + delta, 1));
@@ -194,10 +227,12 @@ export default function Calendar() {
 
           {weeks.flat().map((cell, i) => {
             const dayEvents = eventsByDay.get(cell.date.toDateString()) ?? [];
+            const dayTasks = tasksByDay.get(cell.date.toDateString()) ?? [];
             const isToday = sameDay(cell.date, today);
             const isSelected = selectedDate !== null && sameDay(cell.date, selectedDate);
-            const shown = dayEvents.slice(0, MAX_EVENTS_PER_CELL);
-            const extra = dayEvents.length - shown.length;
+            const shownEvents = dayEvents.slice(0, MAX_EVENTS_PER_CELL);
+            const shownTasks = dayTasks.slice(0, Math.max(0, MAX_EVENTS_PER_CELL - shownEvents.length));
+            const extra = dayEvents.length - shownEvents.length + (dayTasks.length - shownTasks.length);
             return (
               <button
                 key={i}
@@ -209,10 +244,15 @@ export default function Calendar() {
               >
                 <div className="calendar-date">{cell.date.getDate()}</div>
                 <div className="calendar-events">
-                  {shown.map((ev) => (
+                  {shownEvents.map((ev) => (
                     <div className="calendar-event" key={ev.id} title={ev.title}>
                       {!ev.all_day && <span className="calendar-event-time">{formatShortTime(ev.start_at)} </span>}
                       {ev.title}
+                    </div>
+                  ))}
+                  {shownTasks.map((t) => (
+                    <div className="calendar-event calendar-task" key={t.id} title={t.name}>
+                      {taskIcon(t.category)} {t.name}
                     </div>
                   ))}
                   {extra > 0 && <div className="calendar-more">+{extra} more</div>}
@@ -234,8 +274,8 @@ export default function Calendar() {
             </button>
           </div>
 
-          {selectedDayEvents.length === 0 ? (
-            <div className="empty-state">No events this day.</div>
+          {selectedDayEvents.length === 0 && selectedDayTasks.length === 0 ? (
+            <div className="empty-state">Nothing this day.</div>
           ) : (
             <div className="list" style={{ marginTop: 10 }}>
               {selectedDayEvents.map((ev) => (
@@ -259,6 +299,24 @@ export default function Calendar() {
                       aria-label="Delete event"
                     >
                       ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {selectedDayTasks.map((t) => (
+                <div className="card" key={t.id} style={{ marginBottom: 0 }}>
+                  <div className="row-between">
+                    <div>
+                      <span className="chip chip-warning">
+                        {taskIcon(t.category)} {t.category === "cleaning" ? "Cleaning" : "Maintenance"}
+                      </span>
+                      <div style={{ marginTop: 6 }}>
+                        <strong>{t.name}</strong>
+                      </div>
+                      {t.notes && <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>{t.notes}</div>}
+                    </div>
+                    <button type="button" className="btn btn-primary" onClick={() => completeTask(t.id)}>
+                      Mark done
                     </button>
                   </div>
                 </div>

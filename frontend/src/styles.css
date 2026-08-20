@@ -538,6 +538,10 @@ button {
   font-weight: 600;
 }
 
+.calendar-task {
+  color: var(--warning);
+}
+
 .calendar-more {
   font-size: 10px;
   color: var(--text-faint);
