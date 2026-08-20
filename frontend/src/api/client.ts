@@ -172,6 +172,31 @@ export interface Meal {
   created_at: string;
 }
 
+export interface SavedFood {
+  id: string;
+  name: string;
+  calories: number | null;
+  protein_g: number | null;
+  carbs_g: number | null;
+  fat_g: number | null;
+  created_at: string;
+}
+
+export interface WorkoutRoutine {
+  id: string;
+  name: string;
+  created_at: string;
+}
+export interface WorkoutRoutineExercise {
+  id: string;
+  routine_id: string;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  weight: number | null;
+  sort_order: number;
+}
+
 export interface UserSettings {
   calorie_target: number | null;
   protein_target_g: number | null;
@@ -310,6 +335,14 @@ export const api = {
   ) => request<WorkoutExercise>(`/workouts/${workoutId}/exercises`, { method: "POST", body: JSON.stringify(data) }),
   deleteWorkoutExercise: (id: string) => request<{ ok: true }>(`/workouts/exercises/${id}`, { method: "DELETE" }),
 
+  // Workout routines
+  getRoutines: () => request<{ routines: WorkoutRoutine[]; exercises: WorkoutRoutineExercise[] }>("/routines"),
+  createRoutine: (name: string) => request<WorkoutRoutine>("/routines", { method: "POST", body: JSON.stringify({ name }) }),
+  deleteRoutine: (id: string) => request<{ ok: true }>(`/routines/${id}`, { method: "DELETE" }),
+  createRoutineExercise: (routineId: string, data: { name: string; sets?: number; reps?: number; weight?: number }) =>
+    request<WorkoutRoutineExercise>(`/routines/${routineId}/exercises`, { method: "POST", body: JSON.stringify(data) }),
+  deleteRoutineExercise: (id: string) => request<{ ok: true }>(`/routines/exercises/${id}`, { method: "DELETE" }),
+
   // Meals
   listMeals: (from: string, to: string) =>
     request<Meal[]>(`/meals?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
@@ -323,6 +356,12 @@ export const api = {
     notes?: string;
   }) => request<Meal>("/meals", { method: "POST", body: JSON.stringify(data) }),
   deleteMeal: (id: string) => request<{ ok: true }>(`/meals/${id}`, { method: "DELETE" }),
+
+  // Saved foods — for one-tap re-logging of things eaten often
+  listSavedFoods: () => request<SavedFood[]>("/meals/saved"),
+  createSavedFood: (data: { name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number }) =>
+    request<SavedFood>("/meals/saved", { method: "POST", body: JSON.stringify(data) }),
+  deleteSavedFood: (id: string) => request<{ ok: true }>(`/meals/saved/${id}`, { method: "DELETE" }),
 
   // Settings
   getSettings: () => request<UserSettings>("/settings"),

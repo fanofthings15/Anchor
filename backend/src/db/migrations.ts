@@ -204,6 +204,39 @@ CREATE TABLE IF NOT EXISTS user_settings (
   fat_target_g REAL,
   theme TEXT NOT NULL DEFAULT 'dark'
 );
+
+CREATE TABLE IF NOT EXISTS saved_foods (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  calories INTEGER,
+  protein_g REAL,
+  carbs_g REAL,
+  fat_g REAL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_saved_foods_user ON saved_foods(user_id);
+
+CREATE TABLE IF NOT EXISTS workout_routines (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workout_routines_user ON workout_routines(user_id);
+
+CREATE TABLE IF NOT EXISTS workout_routine_exercises (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  routine_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  sets INTEGER,
+  reps INTEGER,
+  weight REAL,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_workout_routine_exercises_user ON workout_routine_exercises(user_id);
+CREATE INDEX IF NOT EXISTS idx_workout_routine_exercises_routine ON workout_routine_exercises(routine_id);
 `);
 
   // sort_order was added to `todos` after the initial schema (drag-to-reorder within a

@@ -1,41 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CalendarEvent, type RecurringTask } from "../api/client";
+import { buildMonthGrid, sameDay } from "../calendarUtils";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_EVENTS_PER_CELL = 3;
 
 function taskIcon(category: RecurringTask["category"]): string {
   return category === "cleaning" ? "🧹" : "🔧";
-}
-
-interface DayCell {
-  date: Date;
-  inMonth: boolean;
-}
-
-// Sunday-first weeks covering the full month plus leading/trailing days from
-// adjacent months to fill out the grid.
-function buildMonthGrid(year: number, month: number): DayCell[][] {
-  const firstOfMonth = new Date(year, month, 1);
-  const startOffset = firstOfMonth.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
-
-  const cursor = new Date(year, month, 1 - startOffset);
-  const weeks: DayCell[][] = [];
-  for (let i = 0; i < totalCells; i += 7) {
-    const week: DayCell[] = [];
-    for (let d = 0; d < 7; d++) {
-      week.push({ date: new Date(cursor), inMonth: cursor.getMonth() === month });
-      cursor.setDate(cursor.getDate() + 1);
-    }
-    weeks.push(week);
-  }
-  return weeks;
-}
-
-function sameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 function dateInputValue(d: Date): string {
