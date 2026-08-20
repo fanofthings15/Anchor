@@ -548,6 +548,15 @@ button {
   color: var(--warning);
 }
 
+.calendar-event-google {
+  color: var(--accent);
+}
+
+.calendar-event-google::before {
+  content: "G ";
+  font-weight: 700;
+}
+
 .workout-cal-cell {
   min-height: 44px;
   align-items: center;

@@ -140,7 +140,10 @@ export interface CalendarEvent {
   end_at: string | null;
   all_day: boolean;
   location: string;
-  created_at: string;
+  created_at?: string;
+  // Present (and "google") only on events read in from a connected Google Calendar —
+  // those are display-only imports, never editable/deletable from this app.
+  source?: "google";
 }
 
 export interface Bill {
@@ -356,6 +359,14 @@ export const api = {
     data: Partial<Pick<CalendarEvent, "title" | "notes" | "start_at" | "end_at" | "all_day" | "location">>
   ) => request<CalendarEvent>(`/calendar/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteCalendarEvent: (id: string) => request<{ ok: true }>(`/calendar/${id}`, { method: "DELETE" }),
+
+  // Google Calendar — read-only import, never writes back to Google. "Connect" is a real
+  // page navigation (through Google's own consent screen), not a fetch, so it isn't
+  // exposed here as a request()-based call.
+  getGoogleCalendarStatus: () => request<{ connected: boolean; configured: boolean }>("/calendar/google/status"),
+  listGoogleCalendarEvents: (from: string, to: string) =>
+    request<CalendarEvent[]>(`/calendar/google/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  disconnectGoogleCalendar: () => request<{ connected: false }>("/calendar/google/disconnect", { method: "DELETE" }),
 
   // Bills
   listBills: () => request<Bill[]>("/bills"),

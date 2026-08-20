@@ -19,6 +19,7 @@ import { settingsRouter } from "./routes/settings";
 import { todayRouter } from "./routes/today";
 import { externalRouter } from "./routes/external";
 import { backupRouter } from "./routes/backup";
+import { googleCalendarRouter } from "./routes/googleCalendar";
 import { startScheduledBackups } from "./scheduledBackup";
 
 const app = express();
@@ -65,6 +66,10 @@ app.use("/api/notes", notesRouter);
 app.use("/api/todos", todosRouter);
 app.use("/api/cleaning", cleaningRouter);
 app.use("/api/shopping", shoppingRouter);
+// Mounted ahead of the general /api/calendar router — no actual path collision (its own
+// routes are all multi-segment vs. calendarRouter's single-segment /:id patterns), but
+// registering the more specific prefix first reads more safely regardless.
+app.use("/api/calendar/google", googleCalendarRouter);
 app.use("/api/calendar", calendarRouter);
 app.use("/api/bills", billsRouter);
 app.use("/api/investments", investmentsRouter);

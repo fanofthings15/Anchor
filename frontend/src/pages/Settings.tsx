@@ -23,6 +23,11 @@ export default function Settings() {
   const [tokenBusy, setTokenBusy] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
 
+  const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleConfigured, setGoogleConfigured] = useState(true);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleResult, setGoogleResult] = useState<"connected" | "error" | null>(null);
+
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const [pendingRestore, setPendingRestore] = useState<{ data: unknown; exportedAt: string; fileName: string } | null>(null);
@@ -33,6 +38,16 @@ export default function Settings() {
 
   useEffect(() => {
     load();
+    loadGoogleStatus();
+
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("google_calendar");
+    if (result === "connected" || result === "error") {
+      setGoogleResult(result);
+      params.delete("google_calendar");
+      const rest = params.toString();
+      window.history.replaceState(null, "", window.location.pathname + (rest ? `?${rest}` : ""));
+    }
   }, []);
 
   async function load() {
@@ -49,6 +64,23 @@ export default function Settings() {
       setTheme(s.theme);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadGoogleStatus() {
+    const s = await api.getGoogleCalendarStatus();
+    setGoogleConnected(s.connected);
+    setGoogleConfigured(s.configured);
+  }
+
+  async function disconnectGoogle() {
+    setGoogleBusy(true);
+    try {
+      await api.disconnectGoogleCalendar();
+      setGoogleConnected(false);
+      setGoogleResult(null);
+    } finally {
+      setGoogleBusy(false);
     }
   }
 
@@ -368,6 +400,36 @@ export default function Settings() {
             <button type="button" className="btn btn-primary" onClick={generateToken} disabled={tokenBusy}>
               {tokenBusy ? "Working…" : hasApiToken ? "Regenerate token" : "Generate token"}
             </button>
+          </div>
+        )}
+      </div>
+
+      <h2 style={{ marginTop: 24 }}>Google Calendar</h2>
+      <div className="card">
+        {googleResult === "connected" && (
+          <div className="text-dim" style={{ fontSize: 13, marginBottom: 12 }}>
+            Connected — your Google Calendar events now show up alongside Anchor's on the Calendar page.
+          </div>
+        )}
+        {googleResult === "error" && (
+          <div className="text-danger" style={{ fontSize: 13, marginBottom: 12 }}>
+            Couldn't connect — try again from the button below.
+          </div>
+        )}
+        {!googleConfigured ? (
+          <div className="text-dim" style={{ fontSize: 13 }}>Google Calendar isn't configured on this server yet.</div>
+        ) : googleConnected ? (
+          <div className="form-actions">
+            <span className="chip chip-accent">Connected</span>
+            <button type="button" className="btn text-danger" onClick={disconnectGoogle} disabled={googleBusy}>
+              {googleBusy ? "Working…" : "Disconnect"}
+            </button>
+          </div>
+        ) : (
+          <div className="form-actions">
+            <a className="btn btn-primary" href="/api/calendar/google/connect">
+              Connect Google Calendar
+            </a>
           </div>
         )}
       </div>

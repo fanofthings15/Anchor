@@ -297,6 +297,17 @@ CREATE TABLE IF NOT EXISTS migration_flags (
   key TEXT PRIMARY KEY,
   applied_at TEXT NOT NULL
 );
+
+-- One row per user who's connected their Google Calendar (read-only import only — this
+-- app never writes back to Google). refresh_token is long-lived; access_token/expiry are
+-- refreshed on demand when a request needs one and the cached one has expired.
+CREATE TABLE IF NOT EXISTS google_calendar_connections (
+  user_id TEXT PRIMARY KEY,
+  refresh_token TEXT NOT NULL,
+  access_token TEXT,
+  access_token_expires_at TEXT,
+  connected_at TEXT NOT NULL
+);
 `);
 
   // sort_order was added to `todos` after the initial schema (drag-to-reorder within a

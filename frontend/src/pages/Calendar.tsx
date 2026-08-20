@@ -67,7 +67,11 @@ export default function Calendar() {
     try {
       const from = new Date(year, month, 1).toISOString();
       const to = new Date(year, month + 1, 1).toISOString();
-      setEvents(await api.listCalendarEvents(from, to));
+      // Google events are fetched live (no local caching) and merged in — never errors
+      // the whole page if Google's unreachable or the connection was revoked, since the
+      // backend already swallows those cases and just returns an empty list.
+      const [own, google] = await Promise.all([api.listCalendarEvents(from, to), api.listGoogleCalendarEvents(from, to)]);
+      setEvents([...own, ...google]);
     } finally {
       setLoading(false);
     }
@@ -216,7 +220,11 @@ export default function Calendar() {
                 <div className="calendar-date">{cell.date.getDate()}</div>
                 <div className="calendar-events">
                   {shownEvents.map((ev) => (
-                    <div className="calendar-event" key={ev.id} title={ev.title}>
+                    <div
+                      className={`calendar-event${ev.source === "google" ? " calendar-event-google" : ""}`}
+                      key={ev.id}
+                      title={ev.title}
+                    >
                       {!ev.all_day && <span className="calendar-event-time">{formatShortTime(ev.start_at)} </span>}
                       {ev.title}
                     </div>
@@ -253,9 +261,10 @@ export default function Calendar() {
                 <div className="card" key={ev.id} style={{ marginBottom: 0 }}>
                   <div className="row-between">
                     <div>
-                      <div className="row">
+                      <div className="row" style={{ flexWrap: "wrap" }}>
                         <span className="chip">{ev.all_day ? "All day" : formatTime(ev.start_at)}</span>
                         {!ev.all_day && ev.end_at && <span className="text-dim">– {formatTime(ev.end_at)}</span>}
+                        {ev.source === "google" && <span className="chip chip-accent">Google Calendar</span>}
                       </div>
                       <div style={{ marginTop: 6 }}>
                         <strong>{ev.title}</strong>
@@ -263,14 +272,16 @@ export default function Calendar() {
                       {ev.location && <div className="text-dim" style={{ fontSize: 13 }}>{ev.location}</div>}
                       {ev.notes && <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>{ev.notes}</div>}
                     </div>
-                    <button
-                      type="button"
-                      className="btn-icon text-danger"
-                      onClick={() => removeEvent(ev.id)}
-                      aria-label="Delete event"
-                    >
-                      ✕
-                    </button>
+                    {ev.source !== "google" && (
+                      <button
+                        type="button"
+                        className="btn-icon text-danger"
+                        onClick={() => removeEvent(ev.id)}
+                        aria-label="Delete event"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
