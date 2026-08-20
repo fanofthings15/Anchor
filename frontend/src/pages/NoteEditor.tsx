@@ -6,6 +6,30 @@ function formatUpdated(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// A deliberately tiny markdown subset (bold + two heading levels) rather than a full
+// parser/library — escapes first, then only ever introduces the handful of tags below
+// around already-escaped text, so this can't be used to inject arbitrary HTML.
+function applyBoldMarkup(escapedLine: string): string {
+  return escapedLine.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+}
+
+function renderMarkdown(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => {
+      const escaped = escapeHtml(line);
+      if (escaped.startsWith("## ")) return `<h3>${applyBoldMarkup(escaped.slice(3))}</h3>`;
+      if (escaped.startsWith("# ")) return `<h2>${applyBoldMarkup(escaped.slice(2))}</h2>`;
+      const bolded = applyBoldMarkup(escaped);
+      return bolded.trim() === "" ? "<br/>" : `<p>${bolded}</p>`;
+    })
+    .join("");
+}
+
 // Reads a pasted image clipboard item into a base64 data URI the backend's upload
 // endpoint expects — FileReader is callback-based, so this wraps it in a promise.
 function fileToDataUrl(file: File): Promise<string> {
@@ -34,6 +58,8 @@ export default function NoteEditor() {
   const [unlockError, setUnlockError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Latest values escape the render closure via refs so the unmount-time flush (browser
   // back, nav-link tap, etc. — none of which necessarily blur the field first) always
@@ -185,6 +211,40 @@ export default function NoteEditor() {
     setLightbox(null);
   }
 
+  // Wraps the current selection in **bold** markers. No-op with nothing selected — there's
+  // no cursor-position "start bold mode" concept here, only wrap-what's-highlighted.
+  function applyBold() {
+    const el = textareaRef.current;
+    if (!el || el.selectionStart === el.selectionEnd) return;
+    const { selectionStart: start, selectionEnd: end, value } = el;
+    const next = `${value.slice(0, start)}**${value.slice(start, end)}**${value.slice(end)}`;
+    setBody(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + 2, end + 2);
+    });
+  }
+
+  // Toggles a "# " heading prefix on whichever line the cursor is currently in.
+  function applyHeading() {
+    const el = textareaRef.current;
+    if (!el) return;
+    const { selectionStart: pos, value } = el;
+    const lineStart = value.lastIndexOf("\n", pos - 1) + 1;
+    const lineEndIdx = value.indexOf("\n", pos);
+    const lineEnd = lineEndIdx === -1 ? value.length : lineEndIdx;
+    const line = value.slice(lineStart, lineEnd);
+    const alreadyHeading = line.startsWith("# ");
+    const nextLine = alreadyHeading ? line.slice(2) : `# ${line}`;
+    const next = value.slice(0, lineStart) + nextLine + value.slice(lineEnd);
+    setBody(next);
+    const delta = alreadyHeading ? -2 : 2;
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(pos + delta, pos + delta);
+    });
+  }
+
   if (loading || !note) {
     return (
       <div>
@@ -319,14 +379,48 @@ export default function NoteEditor() {
         </form>
       </div>
 
-      <textarea
-        className="note-editor-body"
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        onBlur={saveBody}
-        onPaste={handlePaste}
-        placeholder="Write something… (paste an image to attach it)"
-      />
+      <div className="row" style={{ gap: 4, marginBottom: 6 }}>
+        <button
+          type="button"
+          className="btn-icon"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={applyBold}
+          disabled={previewMode}
+          aria-label="Bold selected text"
+          title="Bold (select text first)"
+        >
+          <strong>B</strong>
+        </button>
+        <button
+          type="button"
+          className="btn-icon"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={applyHeading}
+          disabled={previewMode}
+          aria-label="Toggle heading on this line"
+          title="Heading"
+        >
+          H
+        </button>
+        <div style={{ flex: 1 }} />
+        <button type="button" className="btn" onClick={() => setPreviewMode((v) => !v)}>
+          {previewMode ? "Write" : "Preview"}
+        </button>
+      </div>
+
+      {previewMode ? (
+        <div className="note-preview" dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }} />
+      ) : (
+        <textarea
+          ref={textareaRef}
+          className="note-editor-body"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={saveBody}
+          onPaste={handlePaste}
+          placeholder="Write something… (paste an image to attach it) — use **bold** or the B/H buttons above"
+        />
+      )}
 
       {uploading && <div className="text-dim" style={{ fontSize: 13, marginTop: 8 }}>Uploading image…</div>}
 

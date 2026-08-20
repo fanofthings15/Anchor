@@ -15,7 +15,9 @@ function DragHandle(props: Record<string, unknown>) {
 }
 
 function preview(body: string): string {
-  const trimmed = body.trim();
+  // Strips the raw markdown markers (##, #, **) rather than rendering them — this is a
+  // plain-text snippet in a compact card, not worth a second HTML renderer for.
+  const trimmed = body.trim().replace(/^#{1,2}\s+/gm, "").replace(/\*\*(.+?)\*\*/g, "$1");
   return trimmed.length > 120 ? `${trimmed.slice(0, 120)}…` : trimmed;
 }
 

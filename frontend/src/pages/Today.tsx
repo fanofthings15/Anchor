@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type Bill, type CalendarEvent, type RecurringTask, type Todo } from "../api/client";
+import { api, type Bill, type CalendarEvent, type RecurringTask, type ShoppingList, type Todo, type TodoList } from "../api/client";
 import { todayISO } from "../calendarUtils";
 
 // UTC-based — matches how todos/bills/recurring-task dates are stored (full ISO
@@ -40,6 +40,11 @@ export default function Today() {
   const [loggedWorkoutToday, setLoggedWorkoutToday] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  const [todoLists, setTodoLists] = useState<TodoList[]>([]);
+  const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
+  const [quickTodoTitle, setQuickTodoTitle] = useState("");
+  const [quickShoppingItem, setQuickShoppingItem] = useState("");
+
   useEffect(() => {
     load();
   }, []);
@@ -47,14 +52,17 @@ export default function Today() {
   async function load() {
     setLoading(true);
     try {
-      const [data, allTodos, mealDates, workoutData] = await Promise.all([
+      const [data, allTodos, mealDates, workoutData, shopping] = await Promise.all([
         api.getToday(),
         api.getTodos(),
         api.listMealDates(),
         api.getWorkouts(),
+        api.getShopping(),
       ]);
       setTodosDue(data.todosDue);
       setUndatedTodos(allTodos.todos.filter((t) => !t.completed && !t.due_at));
+      setTodoLists(allTodos.lists);
+      setShoppingLists(shopping.lists);
       setBillsDue(data.billsDue);
       setTasksDue(data.tasksDue);
       setEventsToday(data.eventsToday);
@@ -64,6 +72,23 @@ export default function Today() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function quickAddTodo(e: React.FormEvent) {
+    e.preventDefault();
+    const title = quickTodoTitle.trim();
+    if (!title || todoLists.length === 0) return;
+    setQuickTodoTitle("");
+    const todo = await api.createTodo({ list_id: todoLists[0].id, title });
+    setUndatedTodos((prev) => [...prev, todo]);
+  }
+
+  async function quickAddShoppingItem(e: React.FormEvent) {
+    e.preventDefault();
+    const name = quickShoppingItem.trim();
+    if (!name || shoppingLists.length === 0) return;
+    setQuickShoppingItem("");
+    await api.createShoppingItem({ list_id: shoppingLists[0].id, name });
   }
 
   async function completeTodo(id: string) {
@@ -107,6 +132,41 @@ export default function Today() {
   return (
     <div>
       <h1>Today</h1>
+
+      {!loading && (todoLists.length > 0 || shoppingLists.length > 0) && (
+        <section>
+          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+            {todoLists.length > 0 && (
+              <form className="row" style={{ flex: "1 1 200px", gap: 8 }} onSubmit={quickAddTodo}>
+                <input
+                  type="text"
+                  placeholder="+ Add a to-do…"
+                  value={quickTodoTitle}
+                  onChange={(e) => setQuickTodoTitle(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn btn-primary" type="submit">
+                  Add
+                </button>
+              </form>
+            )}
+            {shoppingLists.length > 0 && (
+              <form className="row" style={{ flex: "1 1 200px", gap: 8 }} onSubmit={quickAddShoppingItem}>
+                <input
+                  type="text"
+                  placeholder="+ Add to shopping list…"
+                  value={quickShoppingItem}
+                  onChange={(e) => setQuickShoppingItem(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn btn-primary" type="submit">
+                  Add
+                </button>
+              </form>
+            )}
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="empty-state">Loading…</div>

@@ -691,6 +691,37 @@ button {
   margin-bottom: 4px;
 }
 
+.note-preview {
+  width: 100%;
+  min-height: 50vh;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.note-preview h2 {
+  font-size: 20px;
+  margin: 0 0 8px;
+  /* Undoes the global h2 rule's uppercase/letter-spacing, meant for section labels like
+     "TODAY'S EVENTS" — a note heading should render the case the user actually typed. */
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+
+.note-preview h3 {
+  font-size: 17px;
+  margin: 0 0 6px;
+  color: var(--text);
+}
+
+.note-preview p {
+  margin: 0 0 8px;
+}
+
 .note-editor-body {
   width: 100%;
   min-height: 50vh;

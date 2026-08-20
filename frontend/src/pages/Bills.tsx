@@ -37,9 +37,16 @@ function sortBills(a: Bill, b: Bill) {
   return a.next_due_at.localeCompare(b.next_due_at);
 }
 
+function inCurrentMonth(iso: string): boolean {
+  const d = new Date(iso);
+  const now = new Date();
+  return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth();
+}
+
 export default function Bills() {
   const [bills, setBills] = useState<Bill[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
 
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -95,6 +102,7 @@ export default function Bills() {
     setRecurrence("monthly");
     setIntervalDays("30");
     setNextDueAt("");
+    setShowForm(false);
   }
 
   async function markPaid(id: string) {
@@ -140,10 +148,44 @@ export default function Bills() {
     setEditingId(null);
   }
 
+  const leftToPayCents = bills
+    .filter((b) => !paidThisCycle(b) && inCurrentMonth(b.next_due_at))
+    .reduce((sum, b) => sum + b.amount_cents, 0);
+  const paidThisMonthCents = bills
+    .filter((b) => b.last_paid_at && inCurrentMonth(b.last_paid_at))
+    .reduce((sum, b) => sum + b.amount_cents, 0);
+  const totalThisMonthCents = leftToPayCents + paidThisMonthCents;
+
   return (
     <div>
       <h1>Bills</h1>
 
+      {!loading && bills.length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="row" style={{ justifyContent: "center", gap: 32, flexWrap: "wrap" }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 700 }}>{formatCents(totalThisMonthCents)}</div>
+              <div className="text-dim" style={{ fontSize: 12 }}>
+                Total this month
+              </div>
+            </div>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ fontSize: 24, fontWeight: 700, color: leftToPayCents > 0 ? "var(--warning)" : "var(--success)" }}>
+                {formatCents(leftToPayCents)}
+              </div>
+              <div className="text-dim" style={{ fontSize: 12 }}>
+                Left to pay
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!showForm ? (
+        <button type="button" className="btn btn-primary" style={{ marginBottom: 16 }} onClick={() => setShowForm(true)}>
+          + Add bill
+        </button>
+      ) : (
       <form className="card" onSubmit={addBill}>
         <div className="field">
           <label htmlFor="bill-name">Name</label>
@@ -205,11 +247,15 @@ export default function Bills() {
         </div>
 
         <div className="form-actions">
+          <button type="button" className="btn" onClick={() => setShowForm(false)}>
+            Cancel
+          </button>
           <button className="btn btn-primary" type="submit">
             Add bill
           </button>
         </div>
       </form>
+      )}
 
       {loading ? (
         <div className="empty-state">Loading…</div>
