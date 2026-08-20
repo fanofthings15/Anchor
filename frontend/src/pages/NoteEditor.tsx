@@ -12,6 +12,14 @@ function formatUpdated(iso: string): string {
 // in this list is unwrapped (its text kept, the tag itself dropped), not deleted outright.
 const ALLOWED_TAGS = new Set(["P", "BR", "STRONG", "B", "H2", "H3"]);
 
+// Unwrapping one of these without a trace would silently fuse whatever was on either side
+// of it onto one line — browsers represent each new line typed in a contentEditable as
+// its own block element (a <div> by default; execCommand("defaultParagraphSeparator")
+// is set to "p" on focus below specifically to avoid this, but paste/dictation/older
+// stored content can still produce one) — so a <br> is inserted in its place instead of
+// just dropping the boundary.
+const BLOCK_TAGS = new Set(["DIV", "SECTION", "ARTICLE", "HEADER", "FOOTER", "LI", "UL", "OL", "BLOCKQUOTE", "TR", "TD"]);
+
 function sanitizeHtml(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
   function clean(node: Node) {
@@ -19,6 +27,9 @@ function sanitizeHtml(html: string): string {
       if (child.nodeType === Node.ELEMENT_NODE) {
         const el = child as HTMLElement;
         if (!ALLOWED_TAGS.has(el.tagName)) {
+          if (BLOCK_TAGS.has(el.tagName) && el.previousSibling) {
+            node.insertBefore(doc.createElement("br"), el);
+          }
           while (el.firstChild) node.insertBefore(el.firstChild, el);
           node.removeChild(el);
           continue;
@@ -445,6 +456,10 @@ export default function NoteEditor() {
         className="note-editor-body"
         contentEditable
         suppressContentEditableWarning
+        // Without this, Enter creates a <div> per line in most browsers — not in
+        // sanitizeHtml's allowlist, so it'd need unwrapping (handled defensively there
+        // too, but avoiding it here means what's typed matches what's sanitized 1:1).
+        onFocus={() => document.execCommand("defaultParagraphSeparator", false, "p")}
         onInput={handleInput}
         onBlur={saveBody}
         onPaste={handlePaste}
