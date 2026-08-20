@@ -29,6 +29,23 @@ function formatShortTime(iso: string): string {
     .toLowerCase();
 }
 
+// Every calendar day an event touches, as a Date.toDateString() key — so a multi-day
+// event (a trip pulled in from Google, or a meeting that runs past midnight) shows up on
+// every day it spans in the month grid, not just the day it starts.
+function eventDayKeys(e: CalendarEvent): string[] {
+  const start = new Date(e.start_at);
+  const end = e.end_at ? new Date(e.end_at) : start;
+  const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const keys: string[] = [];
+  const cursor = new Date(startDay);
+  while (cursor.getTime() <= endDay.getTime() && keys.length < 60) {
+    keys.push(cursor.toDateString());
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return keys.length > 0 ? keys : [startDay.toDateString()];
+}
+
 export default function Calendar() {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -84,9 +101,10 @@ export default function Calendar() {
   const eventsByDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>();
     for (const e of events) {
-      const key = new Date(e.start_at).toDateString();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
+      for (const key of eventDayKeys(e)) {
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(e);
+      }
     }
     for (const list of map.values()) {
       list.sort((a, b) => a.start_at.localeCompare(b.start_at));

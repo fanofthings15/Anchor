@@ -27,6 +27,9 @@ export default function Settings() {
   const [googleConfigured, setGoogleConfigured] = useState(true);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleResult, setGoogleResult] = useState<"connected" | "error" | null>(null);
+  const [googleCalendars, setGoogleCalendars] = useState<{ id: string; name: string; primary: boolean; selected: boolean }[]>([]);
+  const [googleCalendarsLoading, setGoogleCalendarsLoading] = useState(false);
+  const [googleCalendarsSaving, setGoogleCalendarsSaving] = useState(false);
 
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
@@ -71,6 +74,29 @@ export default function Settings() {
     const s = await api.getGoogleCalendarStatus();
     setGoogleConnected(s.connected);
     setGoogleConfigured(s.configured);
+    if (s.connected) loadGoogleCalendars();
+  }
+
+  async function loadGoogleCalendars() {
+    setGoogleCalendarsLoading(true);
+    try {
+      setGoogleCalendars(await api.listGoogleCalendars());
+    } finally {
+      setGoogleCalendarsLoading(false);
+    }
+  }
+
+  async function toggleGoogleCalendar(id: string) {
+    const next = googleCalendars.map((c) => (c.id === id ? { ...c, selected: !c.selected } : c));
+    const selectedIds = next.filter((c) => c.selected).map((c) => c.id);
+    if (selectedIds.length === 0) return; // must keep at least one calendar selected
+    setGoogleCalendars(next);
+    setGoogleCalendarsSaving(true);
+    try {
+      await api.updateGoogleCalendars(selectedIds);
+    } finally {
+      setGoogleCalendarsSaving(false);
+    }
   }
 
   async function disconnectGoogle() {
@@ -78,6 +104,7 @@ export default function Settings() {
     try {
       await api.disconnectGoogleCalendar();
       setGoogleConnected(false);
+      setGoogleCalendars([]);
       setGoogleResult(null);
     } finally {
       setGoogleBusy(false);
@@ -419,12 +446,38 @@ export default function Settings() {
         {!googleConfigured ? (
           <div className="text-dim" style={{ fontSize: 13 }}>Google Calendar isn't configured on this server yet.</div>
         ) : googleConnected ? (
-          <div className="form-actions">
-            <span className="chip chip-accent">Connected</span>
-            <button type="button" className="btn text-danger" onClick={disconnectGoogle} disabled={googleBusy}>
-              {googleBusy ? "Working…" : "Disconnect"}
-            </button>
-          </div>
+          <>
+            <div className="form-actions" style={{ marginBottom: 12 }}>
+              <span className="chip chip-accent">Connected</span>
+              <button type="button" className="btn text-danger" onClick={disconnectGoogle} disabled={googleBusy}>
+                {googleBusy ? "Working…" : "Disconnect"}
+              </button>
+            </div>
+            {googleCalendarsLoading ? (
+              <div className="text-dim" style={{ fontSize: 13 }}>Loading calendars…</div>
+            ) : googleCalendars.length > 0 ? (
+              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+                {googleCalendars.map((c) => (
+                  <label
+                    key={c.id}
+                    className="row"
+                    style={{ gap: 8, padding: "4px 0", cursor: "pointer" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={c.selected}
+                      onChange={() => toggleGoogleCalendar(c.id)}
+                      disabled={googleCalendarsSaving}
+                    />
+                    <span>
+                      {c.name}
+                      {c.primary && <span className="text-dim"> (primary)</span>}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            ) : null}
+          </>
         ) : (
           <div className="form-actions">
             <a className="btn btn-primary" href="/api/calendar/google/connect">

@@ -372,6 +372,13 @@ CREATE TABLE IF NOT EXISTS google_calendar_connections (
     `);
   }
 
+  // Which of the user's Google calendars (their own + any they've subscribed to, e.g. a
+  // shared calendar with friends) to pull events from — defaults to just their primary
+  // calendar, since that's what the very first version of this feature always fetched.
+  if (!tableColumns(db, "google_calendar_connections").includes("selected_calendar_ids")) {
+    db.exec(`ALTER TABLE google_calendar_connections ADD COLUMN selected_calendar_ids TEXT NOT NULL DEFAULT '["primary"]'`);
+  }
+
   // The first shipped version of the distance-parsing regex (`/mi/` with no boundary)
   // matched inside "min" too, so any cardio exercise logged as duration-only (e.g. "30
   // min", no "X mi" segment) got its duration value copied into distance_miles as well.

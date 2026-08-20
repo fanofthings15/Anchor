@@ -367,6 +367,13 @@ export const api = {
   listGoogleCalendarEvents: (from: string, to: string) =>
     request<CalendarEvent[]>(`/calendar/google/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   disconnectGoogleCalendar: () => request<{ connected: false }>("/calendar/google/disconnect", { method: "DELETE" }),
+  listGoogleCalendars: () =>
+    request<{ id: string; name: string; primary: boolean; selected: boolean }[]>("/calendar/google/calendars"),
+  updateGoogleCalendars: (calendarIds: string[]) =>
+    request<{ calendar_ids: string[] }>("/calendar/google/calendars", {
+      method: "PATCH",
+      body: JSON.stringify({ calendar_ids: calendarIds }),
+    }),
 
   // Bills
   listBills: () => request<Bill[]>("/bills"),

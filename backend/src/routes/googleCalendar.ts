@@ -45,6 +45,16 @@ interface ConnectionRow {
   access_token: string | null;
   access_token_expires_at: string | null;
   connected_at: string;
+  selected_calendar_ids: string;
+}
+
+function getSelectedCalendarIds(row: ConnectionRow): string[] {
+  try {
+    const parsed = JSON.parse(row.selected_calendar_ids);
+    return Array.isArray(parsed) && parsed.every((id) => typeof id === "string") ? parsed : ["primary"];
+  } catch {
+    return ["primary"];
+  }
 }
 
 googleCalendarRouter.get("/status", (req, res) => {
@@ -52,6 +62,69 @@ googleCalendarRouter.get("/status", (req, res) => {
     .query<ConnectionRow, [string]>("SELECT * FROM google_calendar_connections WHERE user_id = ?")
     .get(req.uid);
   res.json({ connected: !!row, configured: !!CLIENT_ID });
+});
+
+interface GoogleCalendarListEntry {
+  id: string;
+  summary: string;
+  primary?: boolean;
+}
+
+// GET /api/calendar/google/calendars — every calendar this Google account can see
+// (their own primary, secondary calendars, and anything shared/subscribed to — e.g. a
+// calendar a friend shares events on), each flagged with whether it's currently one of
+// the ones this app pulls events from.
+googleCalendarRouter.get("/calendars", async (req, res) => {
+  const row = db
+    .query<ConnectionRow, [string]>("SELECT * FROM google_calendar_connections WHERE user_id = ?")
+    .get(req.uid);
+  if (!row) {
+    res.json([]);
+    return;
+  }
+  const accessToken = await getValidAccessToken(req.uid);
+  if (!accessToken) {
+    res.json([]);
+    return;
+  }
+  try {
+    const listRes = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!listRes.ok) {
+      res.json([]);
+      return;
+    }
+    const data = (await listRes.json()) as { items?: GoogleCalendarListEntry[] };
+    const selected = new Set(getSelectedCalendarIds(row));
+    const calendars = (data.items ?? []).map((item) => ({
+      id: item.id,
+      name: item.summary,
+      primary: !!item.primary,
+      selected: selected.has(item.id) || (item.primary && selected.has("primary")),
+    }));
+    res.json(calendars);
+  } catch {
+    res.json([]);
+  }
+});
+
+// PATCH /api/calendar/google/calendars — which calendars from the list above to actually
+// pull events from (e.g. adding a friend's shared calendar alongside the user's own).
+googleCalendarRouter.patch("/calendars", (req, res) => {
+  const { calendar_ids } = req.body as { calendar_ids?: unknown };
+  if (!Array.isArray(calendar_ids) || calendar_ids.length === 0 || !calendar_ids.every((id) => typeof id === "string")) {
+    res.status(400).json({ error: "calendar_ids must be a non-empty array of strings" });
+    return;
+  }
+  const result = db
+    .query("UPDATE google_calendar_connections SET selected_calendar_ids = ? WHERE user_id = ?")
+    .run(JSON.stringify(calendar_ids), req.uid);
+  if (result.changes === 0) {
+    res.status(404).json({ error: "not connected" });
+    return;
+  }
+  res.json({ calendar_ids });
 });
 
 googleCalendarRouter.get("/connect", (req, res) => {
@@ -170,6 +243,15 @@ async function getValidAccessToken(uid: string): Promise<string | null> {
   return tokens.access_token;
 }
 
+// "2026-08-23" -> "2026-08-22". Pure date-string arithmetic (via a UTC-anchored Date, so
+// it's never affected by the server's own local timezone) — used to undo Google's
+// exclusive end.date convention for all-day events.
+function dateMinusOneDay(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 interface GoogleEventItem {
   id: string;
   summary?: string;
@@ -194,29 +276,45 @@ googleCalendarRouter.get("/events", async (req, res) => {
     res.json([]);
     return;
   }
+  const row = db
+    .query<ConnectionRow, [string]>("SELECT * FROM google_calendar_connections WHERE user_id = ?")
+    .get(req.uid);
+  const calendarIds = row ? getSelectedCalendarIds(row) : ["primary"];
   try {
-    const url = new URL("https://www.googleapis.com/calendar/v3/calendars/primary/events");
-    url.searchParams.set("timeMin", new Date(from).toISOString());
-    url.searchParams.set("timeMax", new Date(to).toISOString());
-    url.searchParams.set("singleEvents", "true");
-    url.searchParams.set("orderBy", "startTime");
-    url.searchParams.set("maxResults", "250");
-    const evRes = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!evRes.ok) {
-      res.json([]);
-      return;
-    }
-    const data = (await evRes.json()) as { items?: GoogleEventItem[] };
-    const events = (data.items ?? []).map((item) => ({
-      id: `google-${item.id}`,
-      title: item.summary ?? "(untitled)",
-      notes: item.description ?? "",
-      start_at: item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00.000Z` : ""),
-      end_at: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T00:00:00.000Z` : null),
-      all_day: !item.start?.dateTime,
-      location: item.location ?? "",
-      source: "google" as const,
-    }));
+    const perCalendar = await Promise.all(
+      calendarIds.map(async (calendarId) => {
+        const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`);
+        url.searchParams.set("timeMin", new Date(from).toISOString());
+        url.searchParams.set("timeMax", new Date(to).toISOString());
+        url.searchParams.set("singleEvents", "true");
+        url.searchParams.set("orderBy", "startTime");
+        url.searchParams.set("maxResults", "250");
+        const evRes = await fetch(url.toString(), { headers: { Authorization: `Bearer ${accessToken}` } });
+        if (!evRes.ok) return [];
+        const data = (await evRes.json()) as { items?: GoogleEventItem[] };
+        return (data.items ?? []).map((item) => ({
+          id: `google-${calendarId}-${item.id}`,
+          title: item.summary ?? "(untitled)",
+          notes: item.description ?? "",
+          // All-day dates from Google are plain calendar dates with no timezone attached
+          // (e.g. "2026-08-20") — appending a "Z" would anchor them to UTC midnight, which
+          // renders as the day before in any timezone behind UTC once a browser reads it
+          // back with new Date(...). Emitting a bare local datetime (no "Z"/offset) instead
+          // means each viewer's own browser parses it as their own local midnight, matching
+          // how Anchor's own all-day events already round-trip.
+          // end.date is also exclusive of the last day per Google's convention (an event
+          // spanning Aug 20-22 has end.date = Aug 23) — subtracted back to inclusive here.
+          start_at: item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00` : ""),
+          end_at:
+            item.end?.dateTime ??
+            (item.end?.date ? `${dateMinusOneDay(item.end.date)}T00:00:00` : null),
+          all_day: !item.start?.dateTime,
+          location: item.location ?? "",
+          source: "google" as const,
+        }));
+      })
+    );
+    const events = perCalendar.flat().sort((a, b) => a.start_at.localeCompare(b.start_at));
     res.json(events);
   } catch {
     res.json([]);
