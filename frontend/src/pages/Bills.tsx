@@ -1,0 +1,206 @@
+import { useEffect, useState } from "react";
+import { api, type Bill, type Recurrence } from "../api/client";
+
+const RECURRENCE_OPTIONS: { value: Recurrence; label: string }[] = [
+  { value: "none", label: "None" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
+  { value: "custom", label: "Custom" },
+];
+
+const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+
+function formatCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function paidThisCycle(bill: Bill): boolean {
+  return bill.last_paid_at !== null && bill.last_paid_at >= bill.next_due_at;
+}
+
+function sortBills(a: Bill, b: Bill) {
+  return a.next_due_at.localeCompare(b.next_due_at);
+}
+
+export default function Bills() {
+  const [bills, setBills] = useState<Bill[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [name, setName] = useState("");
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [autopay, setAutopay] = useState(false);
+  const [recurrence, setRecurrence] = useState<Recurrence>("monthly");
+  const [intervalDays, setIntervalDays] = useState("30");
+  const [nextDueAt, setNextDueAt] = useState("");
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      setBills(await api.listBills());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addBill(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedName = name.trim();
+    const dollars = Number(amount);
+    if (!trimmedName || !Number.isFinite(dollars) || !nextDueAt) return;
+
+    const bill = await api.createBill({
+      name: trimmedName,
+      amount_cents: Math.round(dollars * 100),
+      category: category.trim(),
+      autopay,
+      recurrence,
+      recurrence_interval_days: recurrence === "custom" ? Number(intervalDays) || null : null,
+      next_due_at: new Date(nextDueAt).toISOString(),
+    });
+    setBills((prev) => [...prev, bill].sort(sortBills));
+
+    setName("");
+    setAmount("");
+    setCategory("");
+    setAutopay(false);
+    setRecurrence("monthly");
+    setIntervalDays("30");
+    setNextDueAt("");
+  }
+
+  async function markPaid(id: string) {
+    const updated = await api.payBill(id);
+    setBills((prev) => prev.map((b) => (b.id === id ? updated : b)).sort(sortBills));
+  }
+
+  async function remove(id: string) {
+    await api.deleteBill(id);
+    setBills((prev) => prev.filter((b) => b.id !== id));
+  }
+
+  return (
+    <div>
+      <h1>Bills</h1>
+
+      <form className="card" onSubmit={addBill}>
+        <div className="field">
+          <label htmlFor="bill-name">Name</label>
+          <input id="bill-name" type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Electric bill" />
+        </div>
+
+        <div className="field">
+          <label htmlFor="bill-amount">Amount</label>
+          <input
+            id="bill-amount"
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="0.00"
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="bill-category">Category</label>
+          <input id="bill-category" type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Utilities" />
+        </div>
+
+        <div className="field">
+          <label htmlFor="bill-due">Next due date</label>
+          <input id="bill-due" type="date" value={nextDueAt} onChange={(e) => setNextDueAt(e.target.value)} />
+        </div>
+
+        <div className="field">
+          <label htmlFor="bill-recurrence">Recurrence</label>
+          <select id="bill-recurrence" value={recurrence} onChange={(e) => setRecurrence(e.target.value as Recurrence)}>
+            {RECURRENCE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {recurrence === "custom" && (
+          <div className="field">
+            <label htmlFor="bill-interval">Repeat every (days)</label>
+            <input
+              id="bill-interval"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              value={intervalDays}
+              onChange={(e) => setIntervalDays(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className="row">
+          <input id="bill-autopay" type="checkbox" checked={autopay} onChange={(e) => setAutopay(e.target.checked)} />
+          <label htmlFor="bill-autopay">Autopay</label>
+        </div>
+
+        <div className="form-actions">
+          <button className="btn btn-primary" type="submit">
+            Add bill
+          </button>
+        </div>
+      </form>
+
+      {loading ? (
+        <div className="empty-state">Loading…</div>
+      ) : bills.length === 0 ? (
+        <div className="empty-state">No bills yet — add one above.</div>
+      ) : (
+        <div className="list">
+          {bills.map((bill) => {
+            const paid = paidThisCycle(bill);
+            const now = Date.now();
+            const dueTime = new Date(bill.next_due_at).getTime();
+            const overdue = !paid && dueTime < now;
+            const dueSoon = !paid && !overdue && dueTime - now <= THREE_DAYS_MS;
+
+            return (
+              <div className="card" key={bill.id}>
+                <div className="row-between">
+                  <strong>{bill.name}</strong>
+                  <span>{formatCents(bill.amount_cents)}</span>
+                </div>
+                <div className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>
+                  {bill.category && <span className="chip">{bill.category}</span>}
+                  {bill.autopay && <span className="chip chip-accent">Autopay</span>}
+                  {overdue && <span className="chip chip-danger">Overdue</span>}
+                  {dueSoon && <span className="chip chip-warning">Due soon</span>}
+                </div>
+                <div className="row-between" style={{ marginTop: 10 }}>
+                  <span className="text-dim">Due {formatDate(bill.next_due_at)}</span>
+                  <div className="row">
+                    <button type="button" className="btn btn-primary" onClick={() => markPaid(bill.id)}>
+                      Mark paid
+                    </button>
+                    <button type="button" className="btn-icon text-danger" onClick={() => remove(bill.id)} aria-label="Delete bill">
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,428 @@
+:root {
+  --bg: #0f1115;
+  --bg-raised: #171a21;
+  --bg-card: #1c2029;
+  --border: #2a2f3a;
+  --text: #e8eaed;
+  --text-dim: #9aa1ac;
+  --text-faint: #6b7280;
+  --accent: #4da3ff;
+  --accent-dim: #2d6bb0;
+  --danger: #ef5a5a;
+  --success: #4dcf8f;
+  --warning: #e0a83e;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --nav-height: 62px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 16px calc(var(--nav-height) + var(--safe-bottom) + 24px);
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ---------- Nav: mobile bottom tab bar by default ---------- */
+
+.app-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  padding-bottom: var(--safe-bottom);
+}
+
+.app-nav-links {
+  display: flex;
+}
+
+.app-nav-link,
+.app-nav-more-trigger {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--nav-height);
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.app-nav-link.active {
+  color: var(--accent);
+}
+
+.app-nav-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.app-nav-link-desktop-only {
+  display: none;
+}
+
+.more-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+}
+
+.more-sheet {
+  width: 100%;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 8px 0 calc(16px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+}
+
+.more-sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  margin: 8px auto 12px;
+}
+
+.more-sheet-link {
+  padding: 14px 24px;
+  font-size: 16px;
+  color: var(--text);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.more-sheet-link:active {
+  background: var(--bg-card);
+}
+
+/* ---------- Nav: desktop sidebar ---------- */
+
+@media (min-width: 768px) {
+  .app-main {
+    padding: 24px 32px 32px;
+    margin: 0;
+    max-width: none;
+  }
+
+  .app-nav {
+    position: sticky;
+    top: 0;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    height: 100vh;
+    width: 220px;
+    flex-shrink: 0;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+  }
+
+  .app-nav-links {
+    flex-direction: column;
+  }
+
+  .app-nav-link {
+    flex-direction: row;
+    justify-content: flex-start;
+    min-height: 40px;
+    padding: 8px 20px;
+    font-size: 14px;
+    gap: 12px;
+  }
+
+  .app-nav-link-desktop-only {
+    display: flex;
+  }
+
+  .app-nav-more-trigger {
+    display: none;
+  }
+}
+
+/* ---------- Shared building blocks ---------- */
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+
+h2 {
+  font-size: 16px;
+  color: var(--text-dim);
+  margin: 24px 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.empty-state {
+  color: var(--text-faint);
+  padding: 24px 8px;
+  text-align: center;
+  font-size: 14px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.chip-accent {
+  background: rgba(77, 163, 255, 0.15);
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.chip-danger {
+  background: rgba(239, 90, 90, 0.15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.chip-warning {
+  background: rgba(224, 168, 62, 0.15);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+/* Quick-add: pinned input for the highest-frequency capture flows (todos, notes,
+   shopping items) — full width, large touch target, thumb-reachable near the bottom
+   nav rather than buried behind a modal. */
+.quick-add {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.quick-add input {
+  flex: 1;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"],
+input[type="datetime-local"],
+select,
+textarea {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 15px;
+  min-height: 44px;
+}
+
+textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent-dim);
+  outline-offset: -1px;
+}
+
+button {
+  cursor: pointer;
+}
+
+.btn {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 10px 16px;
+  font-size: 14px;
+  min-height: 44px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121f;
+  font-weight: 600;
+}
+
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.btn-icon {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+}
+
+.btn-icon:active {
+  color: var(--text);
+}
+
+.checkbox-btn {
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.checkbox-btn.checked {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.field label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.text-dim {
+  color: var(--text-dim);
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.text-strike {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.chart-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 12px 8px;
+  margin-bottom: 16px;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 10px 14px;
+  font-size: 14px;
+  border-bottom: 2px solid transparent;
+  min-height: 44px;
+}
+
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}

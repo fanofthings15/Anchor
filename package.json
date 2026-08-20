@@ -1,0 +1,16 @@
+{
+  "name": "anchor",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "bun run --filter='*' dev",
+    "build": "bun run --filter='*' build",
+    "build:ui": "cd frontend && bun run build",
+    "start": "cd backend && bun run start",
+    "typecheck": "bun run --filter='*' typecheck"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ]
+}
