@@ -23,9 +23,28 @@ const app = express();
 // larger than the raw file) fit — notes.ts separately caps the decoded image at 8MB.
 app.use(express.json({ limit: "12mb" }));
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uiDir = path.join(__dirname, "../../frontend/dist");
+
 // Exempt from currentUser: a container/orchestrator health check hits this directly,
 // not through Traefik+Authentik, so it never carries an X-authentik-uid header.
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+// PWA home-screen assets — also exempt, and also carved out of Authentik at the Traefik
+// layer (see Home-Wiki's stacks/core/traefik-dynamic/coolify-apps.yml). Neither gate
+// mattered on its own: removing only the Traefik one still left this app's own
+// currentUser check blocking the request. iOS's "Add to Home Screen" icon fetch doesn't
+// reliably carry the Authentik session cookie a normal page load does, so without both
+// exemptions it silently falls back to a generated letter tile instead of the real icon.
+// Deliberately an exact-filename allowlist, not a wildcard static mount, so nothing else
+// in frontend/dist becomes reachable without auth by accident.
+const PUBLIC_ASSET_NAMES = new Set(["apple-touch-icon.png", "manifest.json", "icon-192.png", "icon-512.png", "favicon.svg"]);
+app.get("/:filename", (req, res, next) => {
+  if (!PUBLIC_ASSET_NAMES.has(req.params.filename)) return next();
+  res.sendFile(path.join(uiDir, req.params.filename), (err) => {
+    if (err) next();
+  });
+});
 
 // Resolves req.uid for every other route from Authentik's forward-auth header (or a
 // fixed dev fallback when there's no proxy in front of us at all — see currentUser.ts).
@@ -48,8 +67,6 @@ app.use("/api/today", todayRouter);
 // Serves the built frontend on the same port as the API — production is a single
 // process/single origin, same shape as Anime Recomender and Event Dashboard. Only
 // kicks in once frontend/dist exists; in dev, run the Vite dev server separately.
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uiDir = path.join(__dirname, "../../frontend/dist");
 if (fs.existsSync(uiDir)) {
   app.use(express.static(uiDir));
   app.get("*", (req, res, next) => {
