@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -46,20 +47,34 @@ const tooltipStyle = {
 
 const axisTick = { fill: "var(--text-dim)", fontSize: 11 };
 
+function isTab(value: string | null): value is Tab {
+  return value === "workouts" || value === "food" || value === "weight";
+}
+
 export default function Workouts() {
-  const [tab, setTab] = useState<Tab>("workouts");
+  // Reads the initial tab from ?tab=food (etc.) so a link from elsewhere in the app — the
+  // Today page's "Log food"/"Log workout" reminders — can land directly on the right tab
+  // instead of always dropping onto the default "Workouts" one.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get("tab");
+  const [tab, setTab] = useState<Tab>(isTab(initialTab) ? initialTab : "workouts");
+
+  function selectTab(next: Tab) {
+    setTab(next);
+    setSearchParams(next === "workouts" ? {} : { tab: next }, { replace: true });
+  }
 
   return (
     <div>
       <h1>Workouts</h1>
       <div className="tabs">
-        <button type="button" className={`tab ${tab === "workouts" ? "active" : ""}`} onClick={() => setTab("workouts")}>
+        <button type="button" className={`tab ${tab === "workouts" ? "active" : ""}`} onClick={() => selectTab("workouts")}>
           Workouts
         </button>
-        <button type="button" className={`tab ${tab === "food" ? "active" : ""}`} onClick={() => setTab("food")}>
+        <button type="button" className={`tab ${tab === "food" ? "active" : ""}`} onClick={() => selectTab("food")}>
           Food
         </button>
-        <button type="button" className={`tab ${tab === "weight" ? "active" : ""}`} onClick={() => setTab("weight")}>
+        <button type="button" className={`tab ${tab === "weight" ? "active" : ""}`} onClick={() => selectTab("weight")}>
           Weight
         </button>
       </div>
@@ -68,12 +83,22 @@ export default function Workouts() {
   );
 }
 
-function WorkoutCalendar({
-  workouts,
+function cellDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Shared by the Workouts and Food tabs — a streak stat header plus a month grid where
+// every day is clickable (not just ones with data): pick an empty day to log something
+// for it, or a filled one to see what's already there. `onSelectDay` is responsible for
+// deciding which of those two things happens, since that differs per caller.
+function StreakCalendar({
+  activeDates,
+  selectedDate,
   onSelectDay,
 }: {
-  workouts: Workout[];
-  onSelectDay: (workoutIds: string[]) => void;
+  activeDates: Set<string>;
+  selectedDate?: string;
+  onSelectDay: (dateStr: string) => void;
 }) {
   const [viewDate, setViewDate] = useState(() => new Date());
   const year = viewDate.getFullYear();
@@ -81,19 +106,7 @@ function WorkoutCalendar({
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
   const today = new Date();
 
-  const workoutIdsByDay = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const w of workouts) {
-      // workout_date is a plain "YYYY-MM-DD" — parse as local, not UTC, so it lands on
-      // the same calendar day it was logged for regardless of the browser's timezone.
-      const key = new Date(`${w.workout_date}T00:00:00`).toDateString();
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(w.id);
-    }
-    return map;
-  }, [workouts]);
-
-  const { current, longest } = useMemo(() => computeStreaks(new Set(workouts.map((w) => w.workout_date))), [workouts]);
+  const { current, longest } = useMemo(() => computeStreaks(activeDates), [activeDates]);
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -132,17 +145,18 @@ function WorkoutCalendar({
           </div>
         ))}
         {weeks.flat().map((cell, i) => {
-          const ids = workoutIdsByDay.get(cell.date.toDateString()) ?? [];
+          const dateStr = cellDateStr(cell.date);
+          const hasData = activeDates.has(dateStr);
           const isToday = sameDay(cell.date, today);
+          const isSelected = selectedDate === dateStr;
           return (
             <button
               key={i}
               type="button"
               className={`calendar-cell workout-cal-cell${cell.inMonth ? "" : " outside"}${isToday ? " is-today" : ""}${
-                ids.length > 0 ? " has-workout" : ""
-              }`}
-              onClick={() => ids.length > 0 && onSelectDay(ids)}
-              disabled={ids.length === 0}
+                hasData ? " has-workout" : ""
+              }${isSelected ? " is-selected" : ""}`}
+              onClick={() => onSelectDay(dateStr)}
             >
               {cell.date.getDate()}
             </button>
@@ -303,18 +317,26 @@ function WorkoutsTab() {
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [exercises, selectedExerciseName, workoutDateById]);
 
-  function selectCalendarDay(workoutIds: string[]) {
-    if (workoutIds.length === 0) return;
-    const id = workoutIds[0];
-    setExpandedId(id);
-    document.getElementById(`workout-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  // A day with an existing workout expands and scrolls to it (view what happened); an
+  // empty day just sets the log form's date and scrolls there instead (add something).
+  function selectCalendarDay(dateStr: string) {
+    setQuickDate(dateStr);
+    const match = workouts.find((w) => w.workout_date === dateStr);
+    if (match) {
+      setExpandedId(match.id);
+      document.getElementById(`workout-${match.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      document.getElementById("workout-quick-add")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
+
+  const workoutDates = useMemo(() => new Set(workouts.map((w) => w.workout_date)), [workouts]);
 
   return (
     <div>
-      <WorkoutCalendar workouts={workouts} onSelectDay={selectCalendarDay} />
+      <StreakCalendar activeDates={workoutDates} selectedDate={quickDate} onSelectDay={selectCalendarDay} />
 
-      <form className="quick-add" onSubmit={quickAdd} style={{ flexWrap: "wrap" }}>
+      <form id="workout-quick-add" className="quick-add" onSubmit={quickAdd} style={{ flexWrap: "wrap" }}>
         <input type="date" value={quickDate} onChange={(e) => setQuickDate(e.target.value)} required />
         <input
           type="text"
@@ -825,7 +847,15 @@ function FoodTab() {
     refreshMealDates();
   }
 
-  const foodStreak = useMemo(() => computeStreaks(new Set(mealDates)), [mealDates]);
+  const mealDateSet = useMemo(() => new Set(mealDates), [mealDates]);
+
+  // A day with meals already logged just switches the whole page's date context to it
+  // (the existing Date field/meal list/add form below all already react to selectedDate);
+  // an empty day does the same thing, which is exactly "let me add for this day" here.
+  function selectCalendarDay(dateStr: string) {
+    setSelectedDate(dateStr);
+    document.getElementById("food-day-view")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const dayMeals = useMemo(
     () => [...selectedDayMeals].sort((a, b) => b.created_at.localeCompare(a.created_at)),
@@ -859,14 +889,9 @@ function FoodTab() {
 
   return (
     <div>
-      {foodStreak.current > 0 && (
-        <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-          <span className="chip chip-accent">🔥 {foodStreak.current} day food streak</span>
-          {foodStreak.longest > foodStreak.current && <span className="chip">Longest: {foodStreak.longest}</span>}
-        </div>
-      )}
+      <StreakCalendar activeDates={mealDateSet} selectedDate={selectedDate} onSelectDay={selectCalendarDay} />
 
-      <div className="field">
+      <div id="food-day-view" className="field">
         <label htmlFor="meal-date">Date</label>
         <input id="meal-date" type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
       </div>

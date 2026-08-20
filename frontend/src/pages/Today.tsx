@@ -110,7 +110,7 @@ export default function Today() {
                 {!loggedFoodToday && (
                   <div className="card row-between">
                     <span>🍽 No food logged today</span>
-                    <Link to="/workouts" className="btn btn-primary">
+                    <Link to="/workouts?tab=food" className="btn btn-primary">
                       Log food
                     </Link>
                   </div>
@@ -118,7 +118,7 @@ export default function Today() {
                 {!loggedWorkoutToday && (
                   <div className="card row-between">
                     <span>💪 No workout logged today</span>
-                    <Link to="/workouts" className="btn">
+                    <Link to="/workouts?tab=workouts" className="btn">
                       Log workout
                     </Link>
                   </div>
