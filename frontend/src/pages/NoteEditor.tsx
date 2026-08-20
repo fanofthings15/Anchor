@@ -148,24 +148,44 @@ export default function NoteEditor() {
 
   async function load(noteId: string) {
     setLoading(true);
+    let n: Note;
     try {
-      const [n, settings] = await Promise.all([api.getNote(noteId), api.getSettings()]);
-      setNote(n);
-      setHasNotesPin(settings.has_notes_pin);
-      recordLastNote(n.id, n.locked);
-      if (!n.requires_unlock) {
-        setTitle(n.title);
-        savedTitleRef.current = n.title;
-        setImages(await api.listNoteImages(noteId));
-      }
+      n = await api.getNote(noteId);
     } catch {
       // Most likely the note was deleted (e.g. from another device) since the Notes tab
       // last cached it as the one to jump back into — that cache would otherwise send
-      // every future tap right back into this same dead end.
+      // every future tap right back into this same dead end. Also the only fetch here
+      // whose failure should bail out entirely: unlike settings/images below, there's
+      // nothing useful to show without the note itself.
       clearLastNote(noteId);
       navigate("/notes");
-    } finally {
       setLoading(false);
+      return;
+    }
+    setNote(n);
+    recordLastNote(n.id, n.locked);
+    if (!n.requires_unlock) {
+      setTitle(n.title);
+      savedTitleRef.current = n.title;
+    }
+    setLoading(false);
+
+    // Secondary data, fetched independently so a failure here (e.g. offline and this
+    // particular thing was never cached — note images are deliberately never cached at
+    // all, see vite.config.ts) doesn't discard an already-successfully-loaded note.
+    try {
+      const settings = await api.getSettings();
+      setHasNotesPin(settings.has_notes_pin);
+    } catch {
+      // leaves hasNotesPin at its previous value — only affects whether the lock-toggle
+      // button is enabled, not anything about the note's own content
+    }
+    if (!n.requires_unlock) {
+      try {
+        setImages(await api.listNoteImages(noteId));
+      } catch {
+        setImages([]);
+      }
     }
   }
 

@@ -41,6 +41,23 @@ export function isNotesUnlockStale(): boolean {
   return Date.now() - last > NOTES_INACTIVITY_TIMEOUT_MS;
 }
 
+function currentlyUnlocked(): boolean {
+  return !isNotesUnlockStale() && !!sessionStorage.getItem(NOTES_UNLOCK_KEY);
+}
+
+// The server only redacts a locked note's body/tags based on whether *that specific
+// request* proved PIN knowledge — correct for a live network call, but a response can
+// also come from the offline service-worker cache (see vite.config.ts), fetched at some
+// earlier moment when the note genuinely was unlocked. Replayed later — after the idle
+// timer should have re-locked it, or in a context that was never unlocked at all — that
+// stale response would still carry the real content. This re-derives the lock decision
+// from the *current* client-side unlock state on every read, regardless of where the
+// response came from, so a stale cached payload can never show more than it should.
+function enforceNoteLock(note: Note): Note {
+  if (!note.locked || currentlyUnlocked()) return note;
+  return { ...note, requires_unlock: true, body: "", tags: [] };
+}
+
 // Remembers which note was open last so tapping the Notes tab can jump straight back into
 // it instead of always landing on the list — localStorage (not sessionStorage) since this
 // should survive fully closing and reopening the app, same as a native notes app would.
@@ -315,15 +332,17 @@ export interface TodayResponse {
 
 export const api = {
   // Notes
-  listNotes: () => request<Note[]>("/notes"),
-  getNote: (id: string) => request<Note>(`/notes/${id}`),
+  listNotes: () => request<Note[]>("/notes").then((notes) => notes.map(enforceNoteLock)),
+  getNote: (id: string) => request<Note>(`/notes/${id}`).then(enforceNoteLock),
   createNote: (data: { title: string; body?: string; tags?: string[] }) =>
     request<Note>("/notes", { method: "POST", body: JSON.stringify(data) }),
   updateNote: (id: string, data: Partial<Pick<Note, "title" | "body" | "tags" | "pinned" | "locked">>) =>
-    request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    request<Note>(`/notes/${id}`, { method: "PATCH", body: JSON.stringify(data) }).then(enforceNoteLock),
   deleteNote: (id: string) => request<{ ok: true }>(`/notes/${id}`, { method: "DELETE" }),
   reorderNotes: (orderedIds: string[]) =>
-    request<Note[]>("/notes/reorder", { method: "PATCH", body: JSON.stringify({ ordered_ids: orderedIds }) }),
+    request<Note[]>("/notes/reorder", { method: "PATCH", body: JSON.stringify({ ordered_ids: orderedIds }) }).then((notes) =>
+      notes.map(enforceNoteLock)
+    ),
   unlockNotes: (pin: string) => request<{ token: string }>("/notes/unlock", { method: "POST", body: JSON.stringify({ pin }) }),
 
   // Note images (pasted screenshots/photos attached to a note)

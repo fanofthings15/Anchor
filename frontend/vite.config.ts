@@ -30,19 +30,32 @@ export default defineConfig({
             // included), not just the path — an anchored `/^\/api\//` would never match a
             // real "http://host/api/..." request. A pathname-based function matcher
             // sidesteps that gotcha entirely.
-            // /api/notes is excluded below (its own, more specific rule wins by being
-            // registered first) — its responses are redacted or not based on the caller's
-            // *current* unlock state, not baked into the URL, so a cached copy fetched
-            // while unlocked would keep serving that same unredacted content offline even
-            // after the note re-locks. Simplest safe answer: never cache it at all.
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/") && !url.pathname.startsWith("/api/notes"),
+            // Note *images* are excluded below (the more specific rule wins by being
+            // registered first) — the client-side guard on note text (enforceNoteLock in
+            // api/client.ts) stops a cached response from ever rendering past its current
+            // lock state, but an <img src="..."> is a raw browser fetch the service worker
+            // intercepts directly, with no equivalent JS gate. Since enforceNoteLock
+            // already keeps the image gallery from rendering at all once a note re-locks,
+            // this exclusion is defense-in-depth rather than load-bearing — but it means
+            // even a bug in that guard couldn't leak actual image bytes, only the fact
+            // that some cached bytes exist.
+            // Inlined rather than calling a shared helper: vite-plugin-pwa stringifies
+            // this function and runs it inside the generated service worker, a completely
+            // separate execution context with no access to this config file's own module
+            // scope — a reference to an outer helper here would throw ReferenceError at
+            // runtime and silently break routing (confirmed: this exact mistake made every
+            // rule below match nothing, so *nothing* was ever cached, while looking like
+            // working code at build time).
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith("/api/") &&
+              !(url.pathname.startsWith("/api/notes/images/") || (url.pathname.startsWith("/api/notes/") && url.pathname.endsWith("/images"))),
             method: "GET",
             handler: "NetworkFirst",
             options: {
               // Renamed from the first cut of this feature (anchor-api-cache), which had
-              // no /api/notes exclusion and could have cached an unlocked note's full
-              // content — this abandons that cache outright rather than risk anything
-              // still resolving from it.
+              // no client-side re-validation on notes and could have kept serving an
+              // unlocked note's full content past its lock — this abandons that cache
+              // outright rather than risk anything still resolving from it.
               cacheName: "anchor-api-cache-v2",
               networkTimeoutSeconds: 4,
               expiration: { maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 },
@@ -50,8 +63,9 @@ export default defineConfig({
             },
           },
           {
-            // Notes: never served from cache, network-only — see the exclusion note above.
-            urlPattern: ({ url }) => url.pathname.startsWith("/api/notes"),
+            // Note images: never cached — see the exclusion note above.
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith("/api/notes/images/") || (url.pathname.startsWith("/api/notes/") && url.pathname.endsWith("/images")),
             method: "GET",
             handler: "NetworkOnly",
           },
