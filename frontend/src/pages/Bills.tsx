@@ -10,14 +10,23 @@ const RECURRENCE_OPTIONS: { value: Recurrence; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+// next_due_at is stored as UTC midnight of the intended calendar day, matching the
+// backend's own `date('now')` (UTC) definition of overdue in today.ts — comparing UTC
+// calendar days here (rather than raw instants, or a local-timezone conversion) keeps a
+// bill from flipping to "Overdue" hours early or late depending on the viewer's timezone.
+function daysUntil(iso: string): number {
+  const due = Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+  const now = new Date();
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((due - today) / 86_400_000);
 }
 
 function paidThisCycle(bill: Bill): boolean {
@@ -168,10 +177,9 @@ export default function Bills() {
         <div className="list">
           {bills.map((bill) => {
             const paid = paidThisCycle(bill);
-            const now = Date.now();
-            const dueTime = new Date(bill.next_due_at).getTime();
-            const overdue = !paid && dueTime < now;
-            const dueSoon = !paid && !overdue && dueTime - now <= THREE_DAYS_MS;
+            const diff = daysUntil(bill.next_due_at);
+            const overdue = !paid && diff < 0;
+            const dueSoon = !paid && !overdue && diff <= 3;
 
             return (
               <div className="card" key={bill.id}>

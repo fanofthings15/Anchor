@@ -19,16 +19,27 @@ function todayDateInput(): string {
   return local.toISOString().slice(0, 10);
 }
 
+// next_due_at is stored as UTC midnight of the intended calendar day (created from a bare
+// "YYYY-MM-DD" date-input value via `new Date(str).toISOString()`), so the first 10
+// characters of the ISO string already are that date — no timezone conversion needed, and
+// applying one (as this used to, via getTimezoneOffset) shifts the day backward in any
+// timezone behind UTC.
+function toDateInput(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+// Compares UTC calendar days on both sides, matching the backend's own `date('now')`
+// (UTC) definition of overdue in cleaning.ts — a local-timezone comparison would make a
+// task appear due/overdue up to a day early or late depending on the viewer's offset.
 function daysUntil(iso: string): number {
-  const due = new Date(iso);
-  due.setHours(0, 0, 0, 0);
+  const due = Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
   const now = new Date();
-  now.setHours(0, 0, 0, 0);
-  return Math.round((due.getTime() - now.getTime()) / 86_400_000);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return Math.round((due - today) / 86_400_000);
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 export default function Cleaning() {
@@ -42,6 +53,13 @@ export default function Cleaning() {
   const [recurrence, setRecurrence] = useState<Recurrence>("weekly");
   const [intervalDays, setIntervalDays] = useState("30");
   const [nextDueAt, setNextDueAt] = useState(todayDateInput());
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState<Category>("cleaning");
+  const [editRecurrence, setEditRecurrence] = useState<Recurrence>("weekly");
+  const [editIntervalDays, setEditIntervalDays] = useState("30");
+  const [editNextDueAt, setEditNextDueAt] = useState(todayDateInput());
 
   useEffect(() => {
     load();
@@ -92,6 +110,34 @@ export default function Cleaning() {
   async function remove(id: string) {
     await api.deleteRecurringTask(id);
     setTasks((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  function startEdit(task: RecurringTask) {
+    setEditingId(task.id);
+    setEditName(task.name);
+    setEditCategory(task.category);
+    setEditRecurrence(task.recurrence);
+    setEditIntervalDays(task.recurrence_interval_days != null ? String(task.recurrence_interval_days) : "30");
+    setEditNextDueAt(toDateInput(task.next_due_at));
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(e: React.FormEvent, id: string) {
+    e.preventDefault();
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    const updated = await api.updateRecurringTask(id, {
+      name: trimmed,
+      category: editCategory,
+      recurrence: editRecurrence,
+      recurrence_interval_days: editRecurrence === "custom" ? Number(editIntervalDays) || 30 : null,
+      next_due_at: new Date(editNextDueAt).toISOString(),
+    });
+    setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    setEditingId(null);
   }
 
   return (
@@ -181,6 +227,77 @@ export default function Cleaning() {
       ) : (
         <div className="list">
           {visibleTasks.map((task) => {
+            if (editingId === task.id) {
+              return (
+                <form className="card" key={task.id} onSubmit={(e) => saveEdit(e, task.id)}>
+                  <div className="field">
+                    <label htmlFor={`edit-name-${task.id}`}>Name</label>
+                    <input
+                      id={`edit-name-${task.id}`}
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-category-${task.id}`}>Category</label>
+                    <select
+                      id={`edit-category-${task.id}`}
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value as Category)}
+                    >
+                      <option value="cleaning">Cleaning</option>
+                      <option value="maintenance">Maintenance</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor={`edit-recurrence-${task.id}`}>Repeats</label>
+                    <select
+                      id={`edit-recurrence-${task.id}`}
+                      value={editRecurrence}
+                      onChange={(e) => setEditRecurrence(e.target.value as Recurrence)}
+                    >
+                      <option value="none">Never (one-off)</option>
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                  </div>
+                  {editRecurrence === "custom" && (
+                    <div className="field">
+                      <label htmlFor={`edit-interval-${task.id}`}>Every N days</label>
+                      <input
+                        id={`edit-interval-${task.id}`}
+                        type="number"
+                        min={1}
+                        value={editIntervalDays}
+                        onChange={(e) => setEditIntervalDays(e.target.value)}
+                      />
+                    </div>
+                  )}
+                  <div className="field">
+                    <label htmlFor={`edit-next-due-${task.id}`}>Next due</label>
+                    <input
+                      id={`edit-next-due-${task.id}`}
+                      type="date"
+                      value={editNextDueAt}
+                      onChange={(e) => setEditNextDueAt(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button type="button" className="btn" onClick={cancelEdit}>
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn btn-primary">
+                      Save
+                    </button>
+                  </div>
+                </form>
+              );
+            }
+
             const diff = daysUntil(task.next_due_at);
             return (
               <div className="card" key={task.id}>
@@ -196,9 +313,14 @@ export default function Cleaning() {
                       Next due {formatDate(task.next_due_at)}
                     </div>
                   </div>
-                  <button type="button" className="btn-icon text-danger" onClick={() => remove(task.id)} aria-label="Delete task">
-                    ✕
-                  </button>
+                  <div className="row" style={{ gap: 4 }}>
+                    <button type="button" className="btn-icon" onClick={() => startEdit(task)} aria-label="Edit task">
+                      ✎
+                    </button>
+                    <button type="button" className="btn-icon text-danger" onClick={() => remove(task.id)} aria-label="Delete task">
+                      ✕
+                    </button>
+                  </div>
                 </div>
                 <div className="form-actions" style={{ marginTop: 10 }}>
                   <button type="button" className="btn btn-primary" onClick={() => markDone(task)}>
