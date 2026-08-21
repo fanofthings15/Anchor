@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Habit, type HabitLog } from "../api/client";
-import { addDaysISO, todayISO } from "../calendarUtils";
+import { addDaysISO, computeStreaks, todayISO } from "../calendarUtils";
 
-const WINDOW_DAYS = 140;
+const WINDOW_DAYS = 91;
 
 function logKey(habitId: string, date: string): string {
   return `${habitId}|${date}`;
 }
 
-// Oldest -> newest, ending on today, matching the fixed-length row the backend's
-// GET /habits window is scoped to (see habits.ts's LOG_WINDOW_DAYS).
+// Oldest -> newest, ending on today, matching the fixed-length window the backend's
+// GET /habits window is scoped to (see habits.ts's LOG_WINDOW_DAYS). Rendered as a
+// GitHub-style grid via CSS `grid-auto-flow: column` (see .habit-graph in styles.css) —
+// every 7 consecutive dates become one column, so no manual chunking is needed here.
 function buildWindowDates(): string[] {
   const today = todayISO();
   const dates: string[] = [];
@@ -111,38 +113,38 @@ export default function Habits() {
         <div className="empty-state">No habits yet — add one above.</div>
       ) : (
         <div className="list">
-          {habits.map((habit) => (
-            <div className="card habit-row" key={habit.id}>
-              <div className="row-between">
-                <strong>{habit.name}</strong>
-                <button type="button" className="btn-icon text-danger" onClick={() => remove(habit.id)} aria-label="Delete habit">
-                  ✕
+          {habits.map((habit) => {
+            const doneDates = new Set(dates.filter((date) => (counts.get(logKey(habit.id, date)) ?? 0) >= habit.target_per_day));
+            const { current, longest } = computeStreaks(doneDates);
+            const todayCount = counts.get(logKey(habit.id, today)) ?? 0;
+            const isDoneToday = todayCount >= habit.target_per_day;
+            return (
+              <div className="card habit-row" key={habit.id}>
+                <div className="row-between">
+                  <div className="row" style={{ gap: 8 }}>
+                    <strong>{habit.name}</strong>
+                    {current > 0 && <span className="habit-streak">🔥 {current}</span>}
+                    {longest > current && <span className="habit-streak-best">best {longest}</span>}
+                  </div>
+                  <button type="button" className="btn-icon text-danger" onClick={() => remove(habit.id)} aria-label="Delete habit">
+                    ✕
+                  </button>
+                </div>
+                <div className="habit-graph">
+                  {dates.map((date) => {
+                    const count = counts.get(logKey(habit.id, date)) ?? 0;
+                    const isToday = date === today;
+                    const state = count === 0 ? "empty" : count >= habit.target_per_day ? "full" : "partial";
+                    const cellClass = `habit-cell habit-cell-${state}` + (isToday ? " habit-cell-today" : "");
+                    return <div key={date} className={cellClass} />;
+                  })}
+                </div>
+                <button type="button" className="btn btn-primary habit-log-btn" onClick={() => logToday(habit)}>
+                  {isDoneToday ? "Done ✓" : `Log (${todayCount}/${habit.target_per_day})`}
                 </button>
               </div>
-              <div
-                className="habit-graph"
-                ref={(el) => {
-                  if (el) el.scrollLeft = el.scrollWidth;
-                }}
-              >
-                {dates.map((date) => {
-                  const count = counts.get(logKey(habit.id, date)) ?? 0;
-                  const isToday = date === today;
-                  const state = count === 0 ? "empty" : count >= habit.target_per_day ? "full" : "partial";
-                  return (
-                    <button
-                      key={date}
-                      type="button"
-                      className={`habit-cell habit-cell-${state}`}
-                      disabled={!isToday}
-                      onClick={isToday ? () => logToday(habit) : undefined}
-                      aria-label={isToday ? "Log today" : undefined}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

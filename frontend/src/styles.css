@@ -287,28 +287,35 @@ h2 {
   overflow: hidden;
 }
 
+.habit-streak {
+  font-size: 13px;
+  color: var(--warning);
+}
+
+.habit-streak-best {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+/* GitHub-style grid: 7 rows (one per weekday slot) x 13 columns (13 weeks = ~3
+   months), oldest day top-left, today bottom-right. `grid-auto-flow: column` lets a
+   plain oldest->newest list of cells fill top-to-bottom per column without any manual
+   chunking in Habits.tsx. At 13 columns this fits without horizontal scroll even at
+   375px wide, so unlike the old single-row strip there's nothing to scroll to. */
 .habit-graph {
-  display: flex;
+  display: inline-grid;
+  grid-template-rows: repeat(7, 14px);
+  grid-auto-flow: column;
+  grid-auto-columns: 14px;
   gap: 3px;
   margin-top: 10px;
-  overflow-x: auto;
-  padding-bottom: 2px;
 }
 
 .habit-cell {
-  flex: 0 0 auto;
-  width: 12px;
-  height: 12px;
   border-radius: 3px;
-  border: none;
-  padding: 0;
   background: var(--bg-raised);
   outline: 1px solid var(--border);
   outline-offset: -1px;
-}
-
-.habit-cell:disabled {
-  cursor: default;
 }
 
 .habit-cell-partial {
@@ -319,10 +326,14 @@ h2 {
   background: var(--success);
 }
 
-.habit-cell:not(:disabled) {
-  cursor: pointer;
+.habit-cell-today {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+
+.habit-log-btn {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .row {

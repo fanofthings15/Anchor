@@ -3,10 +3,13 @@ import { db } from "../db";
 
 export const habitsRouter = Router();
 
-// Fixed row length instead of infinite scroll — the UI shows no dates/tooltips on any
-// cell (user's call: "just the green box vs grey box"), so there's nothing for a user to
-// scroll toward. 140 days (20 weeks) is a reasonable strip length for a per-habit row.
-const LOG_WINDOW_DAYS = 140;
+// Fixed grid instead of infinite scroll — the UI shows no dates/tooltips on any cell
+// (user's call: "just the green box vs grey box"), so there's nothing for a user to
+// scroll toward. 91 days (13 whole weeks) is "the last 3 months", rendered as a
+// GitHub-style 7-row x 13-column grid (see Habits.tsx) — streaks are also computed
+// from this same window, so a streak longer than 91 days would under-count, which
+// matches the display window's own scope.
+const LOG_WINDOW_DAYS = 91;
 
 interface HabitRow {
   id: string;
