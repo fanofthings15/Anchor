@@ -13,6 +13,7 @@ import Calendar from "./pages/Calendar";
 import Bills from "./pages/Bills";
 import Investments from "./pages/Investments";
 import Workouts from "./pages/Workouts";
+import Habits from "./pages/Habits";
 import Settings from "./pages/Settings";
 
 export default function App() {
@@ -46,6 +47,7 @@ export default function App() {
           <Route path="/bills" element={<Bills />} />
           <Route path="/investments" element={<Investments />} />
           <Route path="/workouts" element={<Workouts />} />
+          <Route path="/habits" element={<Habits />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>

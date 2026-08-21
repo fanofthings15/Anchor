@@ -283,6 +283,48 @@ h2 {
   font-size: 14px;
 }
 
+.habit-row {
+  overflow: hidden;
+}
+
+.habit-graph {
+  display: flex;
+  gap: 3px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.habit-cell {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: none;
+  padding: 0;
+  background: var(--bg-raised);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+}
+
+.habit-cell:disabled {
+  cursor: default;
+}
+
+.habit-cell-partial {
+  background: #2b6b4f;
+}
+
+.habit-cell-full {
+  background: var(--success);
+}
+
+.habit-cell:not(:disabled) {
+  cursor: pointer;
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
 .row {
   display: flex;
   align-items: center;

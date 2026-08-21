@@ -15,6 +15,7 @@ const MORE = [
   { to: "/bills", label: "Bills", icon: "🧾" },
   { to: "/investments", label: "Investments", icon: "📈" },
   { to: "/workouts", label: "Workouts & Food", icon: "💪" },
+  { to: "/habits", label: "Habits", icon: "🔥" },
   { to: "/settings", label: "Settings", icon: "⚙" },
 ];
 

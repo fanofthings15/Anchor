@@ -290,6 +290,30 @@ CREATE TABLE IF NOT EXISTS weight_entries (
 CREATE INDEX IF NOT EXISTS idx_weight_entries_user ON weight_entries(user_id);
 CREATE INDEX IF NOT EXISTS idx_weight_entries_date ON weight_entries(entry_date);
 
+CREATE TABLE IF NOT EXISTS habits (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  target_per_day INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_habits_user ON habits(user_id);
+
+-- log_date is a plain "YYYY-MM-DD" string, written by the client via
+-- calendarUtils.ts's todayISO() — same local-date convention as
+-- weight_entries.entry_date/workout_date/meal_date, so no server-side
+-- timezone logic is needed. count cycles 0..target_per_day (see habits.ts).
+CREATE TABLE IF NOT EXISTS habit_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  habit_id TEXT NOT NULL,
+  log_date TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(habit_id, log_date)
+);
+CREATE INDEX IF NOT EXISTS idx_habit_logs_habit_date ON habit_logs(habit_id, log_date);
+
 -- Tracks one-time data-repair passes that can't be expressed as an idempotent
 -- ADD COLUMN/backfill (e.g. re-deriving values from data that's already been
 -- transformed once) — run exactly once, ever, per key, rather than on every boot.

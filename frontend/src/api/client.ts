@@ -287,6 +287,19 @@ export interface WeightEntry {
   created_at: string;
 }
 
+export interface Habit {
+  id: string;
+  name: string;
+  target_per_day: number;
+  sort_order: number;
+  created_at: string;
+}
+export interface HabitLog {
+  habit_id: string;
+  log_date: string;
+  count: number;
+}
+
 export interface SavedFood {
   id: string;
   name: string;
@@ -549,6 +562,16 @@ export const api = {
   createWeightEntry: (data: { entry_date: string; weight_lbs: number; notes?: string }) =>
     request<WeightEntry>("/weight", { method: "POST", body: JSON.stringify(data) }),
   deleteWeightEntry: (id: string) => request<{ ok: true }>(`/weight/${id}`, { method: "DELETE" }),
+
+  // Habits
+  getHabits: () => request<{ habits: Habit[]; logs: HabitLog[] }>("/habits"),
+  createHabit: (data: { name: string; target_per_day?: number }) =>
+    request<Habit>("/habits", { method: "POST", body: JSON.stringify(data) }),
+  updateHabit: (id: string, data: Partial<Pick<Habit, "name" | "target_per_day" | "sort_order">>) =>
+    request<Habit>(`/habits/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteHabit: (id: string) => request<{ ok: true }>(`/habits/${id}`, { method: "DELETE" }),
+  logHabit: (id: string, date: string) =>
+    request<HabitLog>(`/habits/${id}/log`, { method: "POST", body: JSON.stringify({ date }) }),
 
   // Settings
   getSettings: () => request<UserSettings>("/settings"),
