@@ -5,12 +5,13 @@ export const habitsRouter = Router();
 
 // Fixed grid instead of infinite scroll — the UI shows no dates/tooltips on any cell
 // (user's call: "just the green box vs grey box"), so there's nothing for a user to
-// scroll toward. 182 days (26 whole weeks) is "the last 6 months" on desktop, rendered
-// as a GitHub-style 7-row x 26-column grid (see Habits.tsx); on narrow/mobile widths
-// the frontend CSS-hides the older half down to the last 91 days (~3 months) without a
-// separate fetch. Streaks are also computed from this same 182-day window, so a streak
-// longer than that would under-count, which matches the display window's own scope.
-const LOG_WINDOW_DAYS = 182;
+// scroll toward. 180 days is "the last 6 months" on desktop, rendered as a compact
+// 3-row x 60-column grid — each column is 3 consecutive days, not a calendar week —
+// (see Habits.tsx); on narrow/mobile widths the frontend CSS-hides the older half down
+// to the last 90 days (~3 months) without a separate fetch. Streaks are also computed
+// from this same 180-day window, so a streak longer than that would under-count, which
+// matches the display window's own scope.
+const LOG_WINDOW_DAYS = 180;
 
 interface HabitRow {
   id: string;

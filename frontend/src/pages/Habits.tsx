@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Habit, type HabitLog } from "../api/client";
 import { addDaysISO, computeStreaks, todayISO } from "../calendarUtils";
 
-const WINDOW_DAYS = 182;
+const WINDOW_DAYS = 180;
 
 function logKey(habitId: string, date: string): string {
   return `${habitId}|${date}`;
@@ -10,10 +10,10 @@ function logKey(habitId: string, date: string): string {
 
 // Oldest -> newest, ending on today, matching the fixed-length window the backend's
 // GET /habits window is scoped to (see habits.ts's LOG_WINDOW_DAYS). Rendered as a
-// GitHub-style grid via CSS `grid-auto-flow: column` (see .habit-graph in styles.css) —
-// every 7 consecutive dates become one column, so no manual chunking is needed here.
-// Always renders the full 182 days (~6 months); on narrow viewports styles.css hides
-// the oldest 91 of them via :nth-child, leaving the most recent ~3 months visible —
+// compact grid via CSS `grid-auto-flow: column` (see .habit-graph in styles.css) —
+// every 3 consecutive dates become one column, so no manual chunking is needed here.
+// Always renders the full 180 days (~6 months); on narrow viewports styles.css hides
+// the oldest 90 of them via :nth-child, leaving the most recent ~3 months visible —
 // no separate mobile date range computed in JS.
 function buildWindowDates(): string[] {
   const today = todayISO();

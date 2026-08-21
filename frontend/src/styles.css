@@ -297,33 +297,35 @@ h2 {
   color: var(--text-faint);
 }
 
-/* GitHub-style grid: 7 rows (one per weekday slot) x 26 columns (26 weeks = ~6 months
-   on desktop), oldest day top-left, today bottom-right. Fluid `fr` columns fill the
-   full card width instead of sitting in a small fixed-size island — cells stay square
-   via `aspect-ratio`, so the whole grid scales with the card rather than leaving a big
-   empty gap next to the full-width Log button. `grid-auto-flow: column` with a fixed
-   7-row template lets a plain oldest->newest list of cells fill top-to-bottom per
-   column without any manual chunking in Habits.tsx. Below the 768px breakpoint
-   (matches the nav's own desktop/mobile split), both the column count drops to 13 and
-   the oldest 91 of the 182 rendered cells are hidden — hidden grid items drop out of
-   grid placement entirely, so the remaining ~3 months' worth reflow to fill all 13
-   columns on their own, with nothing to scroll to. */
+/* Condensed contribution grid: 3 rows x 60 columns (each column = 3 consecutive days,
+   not a calendar week, 180 days = ~6 months on desktop), oldest day top-left, today
+   bottom-right — kept short (3 rows tall) rather than GitHub's usual 7, per request, so
+   the whole thing reads as a compact strip instead of a tall block. Fluid `fr` columns
+   fill the full card width instead of sitting in a small fixed-size island — cells stay
+   square via `aspect-ratio`, so the whole grid scales with the card rather than leaving
+   a big empty gap next to the full-width Log button. `grid-auto-flow: column` with a
+   fixed 3-row template lets a plain oldest->newest list of cells fill top-to-bottom per
+   column without any manual chunking in Habits.tsx. Below the 768px breakpoint (matches
+   the nav's own desktop/mobile split), both the column count drops to 30 and the oldest
+   90 of the 180 rendered cells are hidden — hidden grid items drop out of grid
+   placement entirely, so the remaining ~3 months' worth reflow to fill all 30 columns
+   on their own, with nothing to scroll to. */
 .habit-graph {
   display: grid;
-  grid-template-columns: repeat(26, 1fr);
-  grid-template-rows: repeat(7, auto);
+  grid-template-columns: repeat(60, 1fr);
+  grid-template-rows: repeat(3, auto);
   grid-auto-flow: column;
-  gap: 3px;
+  gap: 2px;
   margin-top: 10px;
   width: 100%;
 }
 
 @media (max-width: 767px) {
   .habit-graph {
-    grid-template-columns: repeat(13, 1fr);
+    grid-template-columns: repeat(30, 1fr);
   }
 
-  .habit-cell:nth-child(-n + 91) {
+  .habit-cell:nth-child(-n + 90) {
     display: none;
   }
 }
