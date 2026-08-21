@@ -9,10 +9,19 @@ const REAUTH_RELOAD_GUARD_COOLDOWN_MS = 30_000;
 // opaque "opaqueredirect" response instead of a thrown error) and force a real navigation
 // instead of surfacing a confusing "Request failed" error for what's really an expired
 // session. Same pattern as Anime-Recomender/Event-Dashboard's frontends.
-function reauthRedirectDetected() {
+async function reauthRedirectDetected() {
   const last = Number(sessionStorage.getItem(REAUTH_RELOAD_GUARD_KEY) ?? 0);
   if (Date.now() - last < REAUTH_RELOAD_GUARD_COOLDOWN_MS) return;
   sessionStorage.setItem(REAUTH_RELOAD_GUARD_KEY, String(Date.now()));
+  // The service worker's navigateFallback answers every navigation — including this
+  // reload — from its own cached app shell, never touching the network (confirmed: a
+  // plain reload() gets `fromServiceWorker: true`). Without unregistering first, this
+  // "force a real navigation" recovery never actually reaches Authentik at all — it
+  // just re-runs the same stale, still-unauthenticated session against the cached
+  // shell, forever, since the 30s guard above stops it from retrying again. A fresh
+  // service worker registers itself again on the next load (see main.tsx).
+  const regs = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(regs.map((r) => r.unregister()));
   window.location.reload();
 }
 
