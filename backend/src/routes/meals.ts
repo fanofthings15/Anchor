@@ -147,6 +147,37 @@ mealsRouter.post("/", (req, res) => {
   res.status(201).json(serialize(row));
 });
 
+mealsRouter.patch("/:id", (req, res) => {
+  const existing = db.query<MealRow, [string, string]>("SELECT * FROM meals WHERE id = ? AND user_id = ?").get(req.params.id, req.uid);
+  if (!existing) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  const { name, calories, protein_g, carbs_g, fat_g, notes, meal_date } = req.body ?? {};
+  const next: MealRow = {
+    ...existing,
+    name: typeof name === "string" && name.trim() ? name.trim() : existing.name,
+    calories: calories === null ? null : typeof calories === "number" ? calories : existing.calories,
+    protein_g: protein_g === null ? null : typeof protein_g === "number" ? protein_g : existing.protein_g,
+    carbs_g: carbs_g === null ? null : typeof carbs_g === "number" ? carbs_g : existing.carbs_g,
+    fat_g: fat_g === null ? null : typeof fat_g === "number" ? fat_g : existing.fat_g,
+    notes: typeof notes === "string" ? notes : existing.notes,
+    meal_date: typeof meal_date === "string" && meal_date.trim() ? meal_date : existing.meal_date,
+  };
+  db.query("UPDATE meals SET name = ?, calories = ?, protein_g = ?, carbs_g = ?, fat_g = ?, notes = ?, meal_date = ? WHERE id = ? AND user_id = ?").run(
+    next.name,
+    next.calories,
+    next.protein_g,
+    next.carbs_g,
+    next.fat_g,
+    next.notes,
+    next.meal_date,
+    req.params.id,
+    req.uid
+  );
+  res.json(serialize(next));
+});
+
 mealsRouter.delete("/:id", (req, res) => {
   db.query("DELETE FROM meals WHERE id = ? AND user_id = ?").run(req.params.id, req.uid);
   res.json({ ok: true });

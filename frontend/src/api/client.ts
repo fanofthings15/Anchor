@@ -546,6 +546,10 @@ export const api = {
     fat_g?: number;
     notes?: string;
   }) => request<Meal>("/meals", { method: "POST", body: JSON.stringify(data) }),
+  updateMeal: (
+    id: string,
+    data: Partial<Pick<Meal, "name" | "calories" | "protein_g" | "carbs_g" | "fat_g" | "notes" | "meal_date">>
+  ) => request<Meal>(`/meals/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteMeal: (id: string) => request<{ ok: true }>(`/meals/${id}`, { method: "DELETE" }),
 
   // Every distinct day a meal was logged — for the food streak.

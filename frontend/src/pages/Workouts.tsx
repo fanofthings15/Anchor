@@ -1034,6 +1034,7 @@ function FoodTab() {
   const [selectedDayMeals, setSelectedDayMeals] = useState<Meal[]>([]);
   const [mealDates, setMealDates] = useState<string[]>([]);
   const [savedFoods, setSavedFoods] = useState<SavedFood[]>([]);
+  const [calorieTarget, setCalorieTarget] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [dayLoading, setDayLoading] = useState(true);
   const [name, setName] = useState("");
@@ -1042,6 +1043,12 @@ function FoodTab() {
   const [carbs, setCarbs] = useState("");
   const [fat, setFat] = useState("");
   const [saveAsFood, setSaveAsFood] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCalories, setEditCalories] = useState("");
+  const [editProtein, setEditProtein] = useState("");
+  const [editCarbs, setEditCarbs] = useState("");
+  const [editFat, setEditFat] = useState("");
 
   useEffect(() => {
     load();
@@ -1056,9 +1063,10 @@ function FoodTab() {
   async function load() {
     setLoading(true);
     try {
-      const [foods, dates] = await Promise.all([api.listSavedFoods(), api.listMealDates()]);
+      const [foods, dates, settings] = await Promise.all([api.listSavedFoods(), api.listMealDates(), api.getSettings()]);
       setSavedFoods(foods);
       setMealDates(dates);
+      setCalorieTarget(settings.calorie_target);
     } finally {
       setLoading(false);
     }
@@ -1129,7 +1137,56 @@ function FoodTab() {
     refreshMealDates();
   }
 
+  // "Log again" for a meal already on this day — e.g. a second hot dog — reuses its exact
+  // name/macros as a brand-new entry rather than bumping some quantity field on the
+  // original, so each hot dog still shows up as its own removable/editable row.
+  async function logAgain(m: Meal) {
+    const meal = await api.createMeal({
+      meal_date: selectedDate,
+      name: m.name,
+      calories: m.calories ?? undefined,
+      protein_g: m.protein_g ?? undefined,
+      carbs_g: m.carbs_g ?? undefined,
+      fat_g: m.fat_g ?? undefined,
+    });
+    setSelectedDayMeals((prev) => [meal, ...prev]);
+    refreshMealDates();
+  }
+
+  function startEdit(m: Meal) {
+    setEditingId(m.id);
+    setEditName(m.name);
+    setEditCalories(m.calories != null ? String(m.calories) : "");
+    setEditProtein(m.protein_g != null ? String(m.protein_g) : "");
+    setEditCarbs(m.carbs_g != null ? String(m.carbs_g) : "");
+    setEditFat(m.fat_g != null ? String(m.fat_g) : "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+  }
+
+  async function saveEdit(e: React.FormEvent, id: string) {
+    e.preventDefault();
+    const trimmed = editName.trim();
+    if (!trimmed) return;
+    const updated = await api.updateMeal(id, {
+      name: trimmed,
+      calories: editCalories ? Number(editCalories) : null,
+      protein_g: editProtein ? Number(editProtein) : null,
+      carbs_g: editCarbs ? Number(editCarbs) : null,
+      fat_g: editFat ? Number(editFat) : null,
+    });
+    setSelectedDayMeals((prev) => prev.map((m) => (m.id === id ? updated : m)));
+    setEditingId(null);
+  }
+
   const mealDateSet = useMemo(() => new Set(mealDates), [mealDates]);
+  const dayCalories = useMemo(
+    () => selectedDayMeals.reduce((sum, m) => sum + (m.calories ?? 0), 0),
+    [selectedDayMeals]
+  );
+  const caloriesRemaining = calorieTarget != null ? calorieTarget - dayCalories : null;
 
   // A day with meals already logged just switches the whole page's date context to it
   // (the meal list/add form below already react to selectedDate); an empty day does the
@@ -1228,30 +1285,114 @@ function FoodTab() {
         </span>
       </label>
 
+      {calorieTarget != null && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="row-between">
+            <span className="text-dim" style={{ fontSize: 13 }}>
+              {dayCalories} / {calorieTarget} kcal
+            </span>
+            <strong className={caloriesRemaining != null && caloriesRemaining < 0 ? "text-danger" : ""}>
+              {caloriesRemaining != null && caloriesRemaining < 0
+                ? `${Math.abs(caloriesRemaining)} over`
+                : `${caloriesRemaining} remaining`}
+            </strong>
+          </div>
+        </div>
+      )}
+
       {loading || dayLoading ? (
         <div className="empty-state">Loading…</div>
       ) : dayMeals.length === 0 ? (
         <div className="empty-state">No meals logged for this day yet.</div>
       ) : (
         <div className="list">
-          {dayMeals.map((m) => (
-            <div className="card" key={m.id}>
-              <div className="row-between">
-                <div>
-                  <strong>{m.name}</strong>
-                  <div className="row" style={{ flexWrap: "wrap", marginTop: 4, gap: 6 }}>
-                    {m.calories != null && <span className="chip">{m.calories} kcal</span>}
-                    {m.protein_g != null && <span className="chip">{m.protein_g}g P</span>}
-                    {m.carbs_g != null && <span className="chip">{m.carbs_g}g C</span>}
-                    {m.fat_g != null && <span className="chip">{m.fat_g}g F</span>}
+          {dayMeals.map((m) =>
+            editingId === m.id ? (
+              <form className="card" key={m.id} onSubmit={(e) => saveEdit(e, m.id)}>
+                <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    style={{ flex: "1 1 140px" }}
+                    autoFocus
+                  />
+                  <input
+                    type="number"
+                    placeholder="Calories"
+                    value={editCalories}
+                    onChange={(e) => setEditCalories(e.target.value)}
+                    style={{ width: 96 }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Protein g"
+                    value={editProtein}
+                    onChange={(e) => setEditProtein(e.target.value)}
+                    style={{ width: 96 }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Carbs g"
+                    value={editCarbs}
+                    onChange={(e) => setEditCarbs(e.target.value)}
+                    style={{ width: 96 }}
+                  />
+                  <input
+                    type="number"
+                    placeholder="Fat g"
+                    value={editFat}
+                    onChange={(e) => setEditFat(e.target.value)}
+                    style={{ width: 96 }}
+                  />
+                </div>
+                <div className="form-actions" style={{ marginTop: 8 }}>
+                  <button type="button" className="btn" onClick={cancelEdit}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Save
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="card" key={m.id}>
+                <div className="row-between">
+                  <div>
+                    <strong>{m.name}</strong>
+                    <div className="row" style={{ flexWrap: "wrap", marginTop: 4, gap: 6 }}>
+                      {m.calories != null && <span className="chip">{m.calories} kcal</span>}
+                      {m.protein_g != null && <span className="chip">{m.protein_g}g P</span>}
+                      {m.carbs_g != null && <span className="chip">{m.carbs_g}g C</span>}
+                      {m.fat_g != null && <span className="chip">{m.fat_g}g F</span>}
+                    </div>
+                  </div>
+                  <div className="row" style={{ gap: 4 }}>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      onClick={() => logAgain(m)}
+                      aria-label={`Log another ${m.name}`}
+                      title="Log another"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-icon"
+                      onClick={() => startEdit(m)}
+                      aria-label={`Edit ${m.name}`}
+                    >
+                      ✎
+                    </button>
+                    <button type="button" className="btn-icon text-danger" onClick={() => remove(m.id)} aria-label="Delete meal">
+                      ✕
+                    </button>
                   </div>
                 </div>
-                <button type="button" className="btn-icon text-danger" onClick={() => remove(m.id)} aria-label="Delete meal">
-                  ✕
-                </button>
               </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
     </div>
