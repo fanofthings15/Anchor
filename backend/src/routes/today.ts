@@ -183,11 +183,12 @@ function getWeekRecap(uid: string) {
 }
 
 function computeRecap(uid: string, start: string, end: string) {
+  // Reads from todo_completions, not todos directly — a completed todo that's since been
+  // deleted (a normal way to tidy up a list) still counts toward the week it was done in.
   const todosCompleted = db
     .query<{ n: number }, [string, string, string]>(
-      `SELECT COUNT(*) as n FROM todos
-       WHERE user_id = ? AND completed = 1 AND completed_at IS NOT NULL
-         AND substr(completed_at, 1, 10) BETWEEN ? AND ?`
+      `SELECT COUNT(*) as n FROM todo_completions
+       WHERE user_id = ? AND substr(completed_at, 1, 10) BETWEEN ? AND ?`
     )
     .get(uid, start, end)!.n;
 

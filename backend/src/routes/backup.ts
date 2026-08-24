@@ -16,6 +16,7 @@ const TABLES = [
   "notes",
   "todo_lists",
   "todos",
+  "todo_completions",
   "recurring_tasks",
   "shopping_lists",
   "shopping_items",

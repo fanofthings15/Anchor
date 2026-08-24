@@ -330,7 +330,27 @@ CREATE TABLE IF NOT EXISTS google_calendar_connections (
   access_token_expires_at TEXT,
   connected_at TEXT NOT NULL
 );
+
+-- A durable record of "this todo was completed at this time", independent of the todos
+-- table itself — the This Week/Last Week recap on the Today page counts from here instead
+-- of from the todos table directly, so clearing out a completed todo (a normal way to tidy
+-- a list) doesn't retroactively erase it from the week's completed count. One row per todo
+-- (todo_id is the PK), upserted on complete and removed on un-complete (see todos.ts) — but
+-- never touched by deleting the todo itself.
+CREATE TABLE IF NOT EXISTS todo_completions (
+  todo_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  completed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_todo_completions_user ON todo_completions(user_id);
 `);
+
+  // Backfill for any todo that was already completed before todo_completions existed —
+  // idempotent (todo_id is the PK) so this is safe to run on every boot, not just once.
+  db.exec(`
+    INSERT OR IGNORE INTO todo_completions (todo_id, user_id, completed_at)
+    SELECT id, user_id, completed_at FROM todos WHERE completed = 1 AND completed_at IS NOT NULL
+  `);
 
   // sort_order was added to `todos` after the initial schema (drag-to-reorder within a
   // list) — backfill it for any DB created before this column existed. No-ops on a fresh

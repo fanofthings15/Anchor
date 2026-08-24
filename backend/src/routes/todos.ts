@@ -180,6 +180,14 @@ todosRouter.patch("/:id/complete", (req, res) => {
     req.params.id,
     req.uid
   );
+  if (completed) {
+    db.query(
+      `INSERT INTO todo_completions (todo_id, user_id, completed_at) VALUES (?, ?, ?)
+       ON CONFLICT(todo_id) DO UPDATE SET completed_at = excluded.completed_at`
+    ).run(req.params.id, req.uid, completedAt!);
+  } else {
+    db.query("DELETE FROM todo_completions WHERE todo_id = ? AND user_id = ?").run(req.params.id, req.uid);
+  }
   const row = db.query<TodoRow, [string]>("SELECT * FROM todos WHERE id = ?").get(req.params.id)!;
   res.json(serializeTodo(row));
 });
