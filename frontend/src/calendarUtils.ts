@@ -49,27 +49,11 @@ export function addDaysISO(iso: string, days: number): string {
   return fmtLocal(d);
 }
 
-function diffDays(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
-// Current streak counts backward from today (or from yesterday, if today just hasn't
-// happened yet — logging nothing so far this morning shouldn't zero out an otherwise-live
-// streak). Longest streak scans the full history for the best run, independent of today.
+// Counts backward from today (or from yesterday, if today just hasn't happened yet —
+// logging nothing so far this morning shouldn't zero out an otherwise-live streak).
 // `dates` is any set of "YYYY-MM-DD" strings — workout_date, meal_date, whatever the
 // caller is tracking a streak over.
-export function computeStreaks(dates: Set<string>): { current: number; longest: number } {
-  if (dates.size === 0) return { current: 0, longest: 0 };
-  const sorted = [...dates].map((s) => new Date(`${s}T00:00:00`)).sort((a, b) => a.getTime() - b.getTime());
-  let longest = 0;
-  let run = 0;
-  let prev: Date | null = null;
-  for (const d of sorted) {
-    run = prev && diffDays(prev, d) === 1 ? run + 1 : 1;
-    longest = Math.max(longest, run);
-    prev = d;
-  }
-
+export function computeStreaks(dates: Set<string>): { current: number } {
   let current = 0;
   const cursor = new Date();
   if (!dates.has(fmtLocal(cursor))) cursor.setDate(cursor.getDate() - 1);
@@ -77,5 +61,5 @@ export function computeStreaks(dates: Set<string>): { current: number; longest: 
     current += 1;
     cursor.setDate(cursor.getDate() - 1);
   }
-  return { current, longest };
+  return { current };
 }

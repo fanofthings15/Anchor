@@ -52,8 +52,8 @@ function tableColumns(table: string): string[] {
 // GET /api/backup/export — every table this user owns, as one self-contained JSON file
 // (note images embedded as base64, not referenced by URL, so the download works fully
 // offline/offsite with nothing left behind on this server). Settings only exports the
-// non-secret preference fields — notes_pin_hash and api_token_hash are deliberately
-// never included, so a downloaded backup can't itself be used to bypass either.
+// non-secret preference fields — notes_pin_hash is deliberately never included, so a
+// downloaded backup can't itself be used to bypass it.
 backupRouter.get("/export", (req, res) => {
   const uid = req.uid;
   const data: Record<string, unknown> = {
@@ -172,9 +172,9 @@ backupRouter.post("/import", (req, res) => {
 
     if (body.settings && typeof body.settings === "object") {
       const s = body.settings as Record<string, unknown>;
-      // Only the non-secret preference fields — never touches notes_pin_hash or
-      // api_token_hash, which aren't in the export in the first place, so a restore can
-      // never silently clear a PIN/token the user has set since making the backup.
+      // Only the non-secret preference fields — never touches notes_pin_hash, which isn't
+      // in the export in the first place, so a restore can never silently clear a PIN the
+      // user has set since making the backup.
       db.query(
         `INSERT INTO user_settings (user_id, calorie_target, protein_target_g, carbs_target_g, fat_target_g, goal_weight_lbs, theme)
          VALUES (?, ?, ?, ?, ?, ?, ?)

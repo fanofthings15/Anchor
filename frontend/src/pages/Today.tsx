@@ -186,37 +186,52 @@ export default function Today() {
       {!loading && weekRecap && (
         <section>
           <h2>This Week</h2>
-          {weekRecap.todosCompleted === 0 &&
-          weekRecap.workoutsLogged === 0 &&
-          weekRecap.billsPaid === 0 &&
-          weekRecap.tasksCompleted === 0 ? (
+          {weekRecap.thisWeek.todosCompleted === 0 &&
+          weekRecap.thisWeek.workoutsLogged === 0 &&
+          weekRecap.thisWeek.billsPaid === 0 &&
+          weekRecap.thisWeek.tasksCompleted === 0 ? (
             <div className="card text-dim">Nothing logged yet this week — plenty of time.</div>
           ) : (
             <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              {weekRecap.todosCompleted > 0 && (
+              {weekRecap.thisWeek.todosCompleted > 0 && (
                 <div className="card" style={{ flex: "1 1 140px" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.todosCompleted}</div>
-                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.todosCompleted, "todo")} done</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.thisWeek.todosCompleted}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.thisWeek.todosCompleted, "todo")} done</div>
                 </div>
               )}
-              {weekRecap.workoutsLogged > 0 && (
+              {weekRecap.thisWeek.workoutsLogged > 0 && (
                 <div className="card" style={{ flex: "1 1 140px" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.workoutsLogged}</div>
-                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.workoutsLogged, "workout")}</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.thisWeek.workoutsLogged}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.thisWeek.workoutsLogged, "workout")}</div>
                 </div>
               )}
-              {weekRecap.tasksCompleted > 0 && (
+              {weekRecap.thisWeek.tasksCompleted > 0 && (
                 <div className="card" style={{ flex: "1 1 140px" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.tasksCompleted}</div>
-                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.tasksCompleted, "chore")} done</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{weekRecap.thisWeek.tasksCompleted}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.thisWeek.tasksCompleted, "chore")} done</div>
                 </div>
               )}
-              {weekRecap.billsPaid > 0 && (
+              {weekRecap.thisWeek.billsPaid > 0 && (
                 <div className="card" style={{ flex: "1 1 140px" }}>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{formatCents(weekRecap.billsPaidCents)}</div>
-                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.billsPaid, "bill")} paid</div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>{formatCents(weekRecap.thisWeek.billsPaidCents)}</div>
+                  <div className="text-dim" style={{ fontSize: 13 }}>{pluralize(weekRecap.thisWeek.billsPaid, "bill")} paid</div>
                 </div>
               )}
+            </div>
+          )}
+          {(weekRecap.lastWeek.todosCompleted > 0 ||
+            weekRecap.lastWeek.workoutsLogged > 0 ||
+            weekRecap.lastWeek.billsPaid > 0 ||
+            weekRecap.lastWeek.tasksCompleted > 0) && (
+            <div className="text-dim" style={{ fontSize: 13, marginTop: 8 }}>
+              Last week: {[
+                weekRecap.lastWeek.todosCompleted > 0 && pluralize(weekRecap.lastWeek.todosCompleted, "todo"),
+                weekRecap.lastWeek.workoutsLogged > 0 && pluralize(weekRecap.lastWeek.workoutsLogged, "workout"),
+                weekRecap.lastWeek.tasksCompleted > 0 && pluralize(weekRecap.lastWeek.tasksCompleted, "chore"),
+                weekRecap.lastWeek.billsPaid > 0 && `${formatCents(weekRecap.lastWeek.billsPaidCents)} in bills`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </div>
           )}
         </section>

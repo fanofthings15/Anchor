@@ -118,7 +118,7 @@ export default function Habits() {
         <div className="list">
           {habits.map((habit) => {
             const doneDates = new Set(dates.filter((date) => (counts.get(logKey(habit.id, date)) ?? 0) >= habit.target_per_day));
-            const { current, longest } = computeStreaks(doneDates);
+            const { current } = computeStreaks(doneDates);
             const todayCount = counts.get(logKey(habit.id, today)) ?? 0;
             const isDoneToday = todayCount >= habit.target_per_day;
             return (
@@ -127,7 +127,6 @@ export default function Habits() {
                   <div className="row" style={{ gap: 8 }}>
                     <strong>{habit.name}</strong>
                     {current > 0 && <span className="habit-streak">🔥 {current}</span>}
-                    {longest > current && <span className="habit-streak-best">best {longest}</span>}
                   </div>
                   <button type="button" className="btn-icon text-danger" onClick={() => remove(habit.id)} aria-label="Delete habit">
                     ✕

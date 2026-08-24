@@ -240,8 +240,6 @@ CREATE TABLE IF NOT EXISTS user_settings (
   carbs_target_g REAL,
   fat_target_g REAL,
   goal_weight_lbs REAL,
-  api_token_hash TEXT,
-  api_token_created_at TEXT,
   notes_pin_hash TEXT,
   theme TEXT NOT NULL DEFAULT 'dark'
 );
@@ -367,15 +365,6 @@ CREATE TABLE IF NOT EXISTS google_calendar_connections (
   if (!tableColumns(db, "user_settings").includes("goal_weight_lbs")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN goal_weight_lbs REAL");
   }
-  if (!tableColumns(db, "user_settings").includes("api_token_hash")) {
-    db.exec("ALTER TABLE user_settings ADD COLUMN api_token_hash TEXT");
-    db.exec("ALTER TABLE user_settings ADD COLUMN api_token_created_at TEXT");
-  }
-  // Unconditional (not inside the guard above) so it also runs on a fresh install, where
-  // the column already exists via CREATE TABLE and the guard above is skipped entirely —
-  // an index nested inside that guard would only ever get created for upgraded DBs.
-  db.exec("CREATE INDEX IF NOT EXISTS idx_user_settings_api_token_hash ON user_settings(api_token_hash)");
-
   if (!tableColumns(db, "user_settings").includes("notes_pin_hash")) {
     db.exec("ALTER TABLE user_settings ADD COLUMN notes_pin_hash TEXT");
   }

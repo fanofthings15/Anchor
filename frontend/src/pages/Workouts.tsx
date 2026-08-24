@@ -123,7 +123,7 @@ function StreakCalendar({
   const weeks = useMemo(() => buildMonthGrid(year, month), [year, month]);
   const today = new Date();
 
-  const { current, longest } = useMemo(() => computeStreaks(activeDates), [activeDates]);
+  const { current } = useMemo(() => computeStreaks(activeDates), [activeDates]);
 
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -132,12 +132,6 @@ function StreakCalendar({
           <div style={{ fontSize: 32, fontWeight: 700, color: current > 0 ? "var(--success)" : "var(--text)" }}>{current}</div>
           <div className="text-dim" style={{ fontSize: 12 }}>
             Day streak
-          </div>
-        </div>
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: 32, fontWeight: 700 }}>{longest}</div>
-          <div className="text-dim" style={{ fontSize: 12 }}>
-            Longest streak
           </div>
         </div>
       </div>

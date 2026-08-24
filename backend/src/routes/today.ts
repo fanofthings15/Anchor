@@ -132,7 +132,7 @@ todayRouter.get("/", (req, res) => {
   const billsDue = db
     .query<BillRow, [string]>(
       `SELECT * FROM bills
-       WHERE user_id = ? AND substr(next_due_at, 1, 10) <= date('now', '+3 days')
+       WHERE user_id = ? AND autopay = 0 AND substr(next_due_at, 1, 10) <= date('now', '+3 days')
        ORDER BY next_due_at ASC`
     )
     .all(req.uid)
@@ -159,40 +159,60 @@ todayRouter.get("/", (req, res) => {
   res.json({ todosDue, billsDue, tasksDue, eventsToday, weekRecap: getWeekRecap(req.uid) });
 });
 
-// A rolling 7-day window (not calendar-week) — so this always shows something in
-// progress rather than resetting to zero every Monday, which would undercut the point
-// of a motivational recap right when the week is just getting started.
+function isoUTC(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+// Calendar week (Sunday-Saturday, UTC — matching the "today" convention used everywhere
+// else in this file) rather than a rolling 7 days, so "this week" and "last week" line up
+// with the Sunday-first weeks the Calendar page already shows. Trades away the rolling
+// window's "always something in progress" feel for a real week-over-week comparison.
 function getWeekRecap(uid: string) {
+  const now = new Date();
+  const thisWeekStart = new Date(now);
+  thisWeekStart.setUTCDate(now.getUTCDate() - now.getUTCDay());
+  const lastWeekStart = new Date(thisWeekStart);
+  lastWeekStart.setUTCDate(thisWeekStart.getUTCDate() - 7);
+  const lastWeekEnd = new Date(thisWeekStart);
+  lastWeekEnd.setUTCDate(thisWeekStart.getUTCDate() - 1);
+
+  return {
+    thisWeek: computeRecap(uid, isoUTC(thisWeekStart), isoUTC(now)),
+    lastWeek: computeRecap(uid, isoUTC(lastWeekStart), isoUTC(lastWeekEnd)),
+  };
+}
+
+function computeRecap(uid: string, start: string, end: string) {
   const todosCompleted = db
-    .query<{ n: number }, [string]>(
+    .query<{ n: number }, [string, string, string]>(
       `SELECT COUNT(*) as n FROM todos
        WHERE user_id = ? AND completed = 1 AND completed_at IS NOT NULL
-         AND substr(completed_at, 1, 10) >= date('now', '-7 days')`
+         AND substr(completed_at, 1, 10) BETWEEN ? AND ?`
     )
-    .get(uid)!.n;
+    .get(uid, start, end)!.n;
 
   const workoutsLogged = db
-    .query<{ n: number }, [string]>(
+    .query<{ n: number }, [string, string, string]>(
       `SELECT COUNT(*) as n FROM workouts
-       WHERE user_id = ? AND substr(workout_date, 1, 10) >= date('now', '-7 days')`
+       WHERE user_id = ? AND substr(workout_date, 1, 10) BETWEEN ? AND ?`
     )
-    .get(uid)!.n;
+    .get(uid, start, end)!.n;
 
   const bills = db
-    .query<{ n: number; total: number | null }, [string]>(
+    .query<{ n: number; total: number | null }, [string, string, string]>(
       `SELECT COUNT(*) as n, SUM(amount_cents) as total FROM bills
        WHERE user_id = ? AND last_paid_at IS NOT NULL
-         AND substr(last_paid_at, 1, 10) >= date('now', '-7 days')`
+         AND substr(last_paid_at, 1, 10) BETWEEN ? AND ?`
     )
-    .get(uid)!;
+    .get(uid, start, end)!;
 
   const tasksCompleted = db
-    .query<{ n: number }, [string]>(
+    .query<{ n: number }, [string, string, string]>(
       `SELECT COUNT(*) as n FROM recurring_tasks
        WHERE user_id = ? AND last_completed_at IS NOT NULL
-         AND substr(last_completed_at, 1, 10) >= date('now', '-7 days')`
+         AND substr(last_completed_at, 1, 10) BETWEEN ? AND ?`
     )
-    .get(uid)!.n;
+    .get(uid, start, end)!.n;
 
   return {
     todosCompleted,
