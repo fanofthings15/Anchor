@@ -232,14 +232,14 @@ function WorkoutsTab() {
   // show what was actually done last time (Hevy's "Previous" column) — the whole point
   // of logging sets individually rather than one aggregate number per exercise.
   const exerciseHistoryByName = useMemo(() => {
-    const map = new Map<string, { workoutId: string; date: string; sets: WorkoutSet[] }[]>();
+    const map = new Map<string, { workoutId: string; date: string; sets: WorkoutSet[]; notes: string }[]>();
     for (const ex of exercises) {
       const key = ex.name.trim().toLowerCase();
       if (!key) continue;
       const exSets = sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index);
       const date = workoutDateById.get(ex.workout_id) ?? "";
       if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push({ workoutId: ex.workout_id, date, sets: exSets });
+      map.get(key)!.push({ workoutId: ex.workout_id, date, sets: exSets, notes: ex.notes });
     }
     for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date));
     return map;
@@ -249,6 +249,15 @@ function WorkoutsTab() {
     const history = exerciseHistoryByName.get(exerciseName.trim().toLowerCase()) ?? [];
     const others = history.filter((h) => h.workoutId !== currentWorkoutId);
     return others.length > 0 ? others[others.length - 1].sets : [];
+  }
+
+  // The note left on the most recent OTHER instance of this exercise — e.g. "only got
+  // halfway on rep 9" — surfaced as a reminder next time it's logged, same "last time"
+  // idea as the Previous sets column, but for the free-text note instead of numbers.
+  function getPreviousNotes(exerciseName: string, currentWorkoutId: string): string {
+    const history = exerciseHistoryByName.get(exerciseName.trim().toLowerCase()) ?? [];
+    const others = history.filter((h) => h.workoutId !== currentWorkoutId && h.notes.trim());
+    return others.length > 0 ? others[others.length - 1].notes : "";
   }
 
   async function quickAdd(e: React.FormEvent) {
@@ -576,6 +585,7 @@ function WorkoutsTab() {
               exerciseNames={exerciseNames}
               sets={sets}
               getPreviousSets={(exerciseName) => getPreviousSets(exerciseName, w.id)}
+              getPreviousNotes={(exerciseName) => getPreviousNotes(exerciseName, w.id)}
               expanded={expandedId === w.id}
               onToggle={() => setExpandedId(expandedId === w.id ? null : w.id)}
               onDelete={() => remove(w.id)}
@@ -836,6 +846,7 @@ function ExerciseBlock({
   exercise,
   sets,
   previousSets,
+  previousNotes,
   onDelete,
   onAddSet,
   onUpdateSet,
@@ -845,6 +856,7 @@ function ExerciseBlock({
   exercise: WorkoutExercise;
   sets: WorkoutSet[];
   previousSets: WorkoutSet[];
+  previousNotes: string;
   onDelete: () => void;
   onAddSet: (data: {
     weight?: number | null;
@@ -897,6 +909,11 @@ function ExerciseBlock({
 
       {showDetail && <ExerciseDetailModal name={exercise.name} onClose={() => setShowDetail(false)} />}
 
+      {previousNotes && (
+        <div className="text-dim" style={{ fontSize: 12, marginBottom: 4 }}>
+          Last time: {previousNotes}
+        </div>
+      )}
       <input
         type="text"
         placeholder="Notes (optional)"
@@ -944,6 +961,7 @@ function WorkoutCard({
   exerciseNames,
   sets,
   getPreviousSets,
+  getPreviousNotes,
   expanded,
   onToggle,
   onDelete,
@@ -961,6 +979,7 @@ function WorkoutCard({
   exerciseNames: string[];
   sets: WorkoutSet[];
   getPreviousSets: (exerciseName: string) => WorkoutSet[];
+  getPreviousNotes: (exerciseName: string) => string;
   expanded: boolean;
   onToggle: () => void;
   onDelete: () => void;
@@ -1077,6 +1096,7 @@ function WorkoutCard({
                     exercise={ex}
                     sets={sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index)}
                     previousSets={getPreviousSets(ex.name)}
+                    previousNotes={getPreviousNotes(ex.name)}
                     onDelete={() => onDeleteExercise(ex.id)}
                     onAddSet={(data) => onAddSet(ex.id, data)}
                     onUpdateSet={onUpdateSet}
