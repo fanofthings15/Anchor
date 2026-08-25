@@ -16,8 +16,14 @@ import { MUSCLE_GROUP_LABELS, type MuscleGroup } from "./exerciseLibrary";
 
 export type MuscleState = "primary" | "secondary" | "none";
 
+const BODY_GRAY = "#3a4152";
 const PRIMARY_COLOR = "var(--accent)";
 const SECONDARY_COLOR = "var(--text-dim)";
+
+// The library's own head artwork bakes in a fixed light-gray fill (#bebebe) that
+// doesn't come from — and isn't overridable via — defaultFill, so it reads as a
+// lighter, oddly-toned patch against the rest of the body unless explicitly matched.
+const HEAD_OVERRIDE: ExtendedBodyPart = { slug: "head", styles: { fill: BODY_GRAY } };
 
 function colorFor(state: MuscleState | undefined): string | undefined {
   if (state === "primary") return PRIMARY_COLOR;
@@ -51,7 +57,7 @@ const BACK_SLUGS: Partial<Record<MuscleGroup, Slug[]>> = {
 const SIDED_SLUGS = new Set<Slug>(["biceps", "triceps", "forearm"]);
 
 function bodyData(slugMap: Partial<Record<MuscleGroup, Slug[]>>, states: Record<MuscleGroup, MuscleState>): ExtendedBodyPart[] {
-  const parts: ExtendedBodyPart[] = [];
+  const parts: ExtendedBodyPart[] = [HEAD_OVERRIDE];
   for (const [muscle, slugs] of Object.entries(slugMap) as [MuscleGroup, Slug[]][]) {
     const color = colorFor(states[muscle]);
     if (!color) continue;
@@ -76,13 +82,13 @@ export default function BodyDiagram({ states }: { states: Record<MuscleGroup, Mu
     <div>
       <div className="row" style={{ justifyContent: "center", gap: 24, flexWrap: "wrap" }}>
         <div style={{ textAlign: "center" }}>
-          <Body data={bodyData(FRONT_SLUGS, states)} side="front" gender="male" defaultFill="#3a4152" border="none" scale={1.1} />
+          <Body data={bodyData(FRONT_SLUGS, states)} side="front" gender="male" defaultFill={BODY_GRAY} border="none" scale={1.1} />
           <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
             Front
           </div>
         </div>
         <div style={{ textAlign: "center" }}>
-          <Body data={bodyData(BACK_SLUGS, states)} side="back" gender="male" defaultFill="#3a4152" border="none" scale={1.1} />
+          <Body data={bodyData(BACK_SLUGS, states)} side="back" gender="male" defaultFill={BODY_GRAY} border="none" scale={1.1} />
           <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
             Back
           </div>
