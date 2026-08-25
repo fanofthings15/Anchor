@@ -1,138 +1,118 @@
 import { MUSCLE_GROUP_LABELS, type MuscleGroup } from "./exerciseLibrary";
 
-// A stylized muscular front/back silhouette — built from overlapping rounded shapes
-// (a torso outline path, capsule-ish ellipses for limbs) rather than axis-aligned boxes,
-// so it actually reads as a body. Muscle groups are shapes layered on top of that
-// silhouette; fill-opacity scales with that muscle's score (0-1, normalized by the
-// caller). Both views share the same outline geometry, only the muscle layer differs.
+// Real anatomical front/back muscle illustrations (not a hand-drawn silhouette) as the
+// base image, with a transparent SVG overlay on top holding one highlight shape per
+// muscle group, positioned to match that image's own proportions (both images share a
+// 1000x1400 viewBox, so the overlay uses the same coordinate space with no conversion).
+// The base image is desaturated via CSS so the colored overlay is what actually reads as
+// "worked this week" — full color there, muted reference everywhere else.
+//
+// Images: "Muscular system.svg" / "Muscular system-back.svg" by Termininja, Wikimedia
+// Commons, CC BY-SA 3.0 (https://commons.wikimedia.org/wiki/File:Muscular_system.svg).
+// Re-optimized with svgo for file size; not otherwise altered. Excluded from the PWA's
+// precache (see vite.config.ts) since they're large — loaded on demand instead.
 
-const OUTLINE = "var(--border)";
-const MUSCLE_COLOR = "var(--accent)";
+interface Region {
+  muscle: MuscleGroup;
+  shape: "ellipse" | "path";
+  cx?: number;
+  cy?: number;
+  rx?: number;
+  ry?: number;
+  d?: string;
+}
 
+const FRONT_REGIONS: Region[] = [
+  { muscle: "shoulders", shape: "ellipse", cx: 330, cy: 320, rx: 70, ry: 65 },
+  { muscle: "shoulders", shape: "ellipse", cx: 670, cy: 320, rx: 70, ry: 65 },
+  { muscle: "chest", shape: "ellipse", cx: 440, cy: 390, rx: 75, ry: 85 },
+  { muscle: "chest", shape: "ellipse", cx: 560, cy: 390, rx: 75, ry: 85 },
+  { muscle: "biceps", shape: "ellipse", cx: 300, cy: 480, rx: 55, ry: 95 },
+  { muscle: "biceps", shape: "ellipse", cx: 700, cy: 480, rx: 55, ry: 95 },
+  { muscle: "forearms", shape: "ellipse", cx: 245, cy: 650, rx: 50, ry: 95 },
+  { muscle: "forearms", shape: "ellipse", cx: 755, cy: 650, rx: 50, ry: 95 },
+  { muscle: "abs", shape: "ellipse", cx: 500, cy: 545, rx: 85, ry: 90 },
+  { muscle: "obliques", shape: "ellipse", cx: 390, cy: 550, rx: 35, ry: 90 },
+  { muscle: "obliques", shape: "ellipse", cx: 610, cy: 550, rx: 35, ry: 90 },
+  { muscle: "quads", shape: "ellipse", cx: 430, cy: 790, rx: 60, ry: 150 },
+  { muscle: "quads", shape: "ellipse", cx: 570, cy: 790, rx: 60, ry: 150 },
+];
+
+const BACK_REGIONS: Region[] = [
+  { muscle: "shoulders", shape: "ellipse", cx: 330, cy: 320, rx: 70, ry: 65 },
+  { muscle: "shoulders", shape: "ellipse", cx: 670, cy: 320, rx: 70, ry: 65 },
+  { muscle: "back", shape: "path", d: "M500,260 L650,340 L622,560 L500,655 L378,560 L350,340 Z" },
+  { muscle: "triceps", shape: "ellipse", cx: 300, cy: 480, rx: 55, ry: 95 },
+  { muscle: "triceps", shape: "ellipse", cx: 700, cy: 480, rx: 55, ry: 95 },
+  {
+    muscle: "glutes",
+    shape: "path",
+    d: "M370,660 C370,628 450,618 500,618 C550,618 630,628 630,660 C630,722 560,782 500,782 C440,782 370,722 370,660 Z",
+  },
+  { muscle: "hamstrings", shape: "ellipse", cx: 430, cy: 890, rx: 60, ry: 110 },
+  { muscle: "hamstrings", shape: "ellipse", cx: 570, cy: 890, rx: 60, ry: 110 },
+  { muscle: "calves", shape: "ellipse", cx: 435, cy: 1120, rx: 45, ry: 90 },
+  { muscle: "calves", shape: "ellipse", cx: 565, cy: 1120, rx: 45, ry: 90 },
+];
+
+// Unworked regions (score 0) stay fully transparent — the underlying image already
+// reads fine as a plain anatomical reference on its own, so only actually-worked
+// muscles should pick up any color; a nonzero baseline here washed the whole body in a
+// faint blue tint regardless of what was worked, which defeated the point of the map.
 function opacityFor(score: number | undefined): number {
-  return 0.12 + (score ?? 0) * 0.72;
+  if (!score) return 0;
+  return 0.25 + score * 0.6;
 }
 
-function BodyOutline() {
-  return (
-    <>
-      <ellipse cx={50} cy={15} rx={10.5} ry={12.5} fill={OUTLINE} />
-      <path d="M 44,25 L 56,25 L 54,33 L 46,33 Z" fill={OUTLINE} />
-      <path
-        fill={OUTLINE}
-        d="M 44,32 L 21,35 C 23,45 27,50 31,53 C 35,68 39,80 43,90
-           C 39,96 35,100 35,104 C 35,108 41,110 50,110 C 59,110 65,108 65,104
-           C 65,100 61,96 57,90 C 61,80 65,68 69,53 C 73,50 77,45 79,35
-           L 56,32 C 54,30 46,30 44,32 Z"
-      />
-      <ellipse cx={24} cy={55} rx={9} ry={18} fill={OUTLINE} transform="rotate(6 24 55)" />
-      <ellipse cx={17} cy={95} rx={7} ry={22} fill={OUTLINE} transform="rotate(10 17 95)" />
-      <ellipse cx={14} cy={135} rx={5.5} ry={10} fill={OUTLINE} />
-      <ellipse cx={76} cy={55} rx={9} ry={18} fill={OUTLINE} transform="rotate(-6 76 55)" />
-      <ellipse cx={83} cy={95} rx={7} ry={22} fill={OUTLINE} transform="rotate(-10 83 95)" />
-      <ellipse cx={86} cy={135} rx={5.5} ry={10} fill={OUTLINE} />
-      <ellipse cx={41} cy={130} rx={11} ry={26} fill={OUTLINE} />
-      <ellipse cx={40} cy={178} rx={7} ry={24} fill={OUTLINE} />
-      <ellipse cx={39} cy={206} rx={8} ry={7} fill={OUTLINE} />
-      <ellipse cx={59} cy={130} rx={11} ry={26} fill={OUTLINE} />
-      <ellipse cx={60} cy={178} rx={7} ry={24} fill={OUTLINE} />
-      <ellipse cx={61} cy={206} rx={8} ry={7} fill={OUTLINE} />
-    </>
-  );
-}
-
-function Muscle({ muscle, score, children }: { muscle: MuscleGroup; score: number | undefined; children: React.ReactNode }) {
-  return (
-    <g fill={MUSCLE_COLOR} fillOpacity={opacityFor(score)} stroke="var(--bg-card)" strokeWidth={0.5}>
-      <title>{MUSCLE_GROUP_LABELS[muscle]}</title>
-      {children}
-    </g>
-  );
-}
-
-function FrontMuscles({ scores }: { scores: Record<MuscleGroup, number> }) {
-  return (
-    <>
-      <Muscle muscle="shoulders" score={scores.shoulders}>
-        <ellipse cx={26} cy={42} rx={9} ry={8} />
-        <ellipse cx={74} cy={42} rx={9} ry={8} />
-      </Muscle>
-      <Muscle muscle="chest" score={scores.chest}>
-        <path d="M 34,45 C 34,42 40,40 47,42 C 49,50 48,58 45,63 C 38,63 33,56 34,45 Z" />
-        <path d="M 66,45 C 66,42 60,40 53,42 C 51,50 52,58 55,63 C 62,63 67,56 66,45 Z" />
-      </Muscle>
-      <Muscle muscle="biceps" score={scores.biceps}>
-        <ellipse cx={23} cy={58} rx={6} ry={12} />
-        <ellipse cx={77} cy={58} rx={6} ry={12} />
-      </Muscle>
-      <Muscle muscle="forearms" score={scores.forearms}>
-        <ellipse cx={17} cy={98} rx={5} ry={16} />
-        <ellipse cx={83} cy={98} rx={5} ry={16} />
-      </Muscle>
-      <Muscle muscle="abs" score={scores.abs}>
-        <rect x={44} y={66} width={6} height={7} rx={2} />
-        <rect x={51} y={66} width={6} height={7} rx={2} />
-        <rect x={44} y={75} width={6} height={7} rx={2} />
-        <rect x={51} y={75} width={6} height={7} rx={2} />
-        <rect x={44} y={84} width={6} height={7} rx={2} />
-        <rect x={51} y={84} width={6} height={7} rx={2} />
-      </Muscle>
-      <Muscle muscle="obliques" score={scores.obliques}>
-        <ellipse cx={38} cy={80} rx={4} ry={12} />
-        <ellipse cx={63} cy={80} rx={4} ry={12} />
-      </Muscle>
-      <Muscle muscle="quads" score={scores.quads}>
-        <ellipse cx={41} cy={128} rx={8} ry={22} />
-        <ellipse cx={59} cy={128} rx={8} ry={22} />
-      </Muscle>
-    </>
-  );
-}
-
-function BackMuscles({ scores }: { scores: Record<MuscleGroup, number> }) {
-  return (
-    <>
-      <Muscle muscle="shoulders" score={scores.shoulders}>
-        <ellipse cx={26} cy={42} rx={9} ry={8} />
-        <ellipse cx={74} cy={42} rx={9} ry={8} />
-      </Muscle>
-      <Muscle muscle="back" score={scores.back}>
-        <path d="M 36,44 C 34,55 34,66 40,78 C 44,84 56,84 60,78 C 66,66 66,55 64,44 C 58,50 42,50 36,44 Z" />
-      </Muscle>
-      <Muscle muscle="triceps" score={scores.triceps}>
-        <ellipse cx={23} cy={58} rx={6} ry={12} />
-        <ellipse cx={77} cy={58} rx={6} ry={12} />
-      </Muscle>
-      <Muscle muscle="glutes" score={scores.glutes}>
-        <path d="M 33,96 C 33,90 41,88 50,88 C 59,88 67,90 67,96 C 67,104 59,108 50,108 C 41,108 33,104 33,96 Z" />
-      </Muscle>
-      <Muscle muscle="hamstrings" score={scores.hamstrings}>
-        <ellipse cx={41} cy={128} rx={8} ry={20} />
-        <ellipse cx={59} cy={128} rx={8} ry={20} />
-      </Muscle>
-      <Muscle muscle="calves" score={scores.calves}>
-        <ellipse cx={40} cy={178} rx={6} ry={18} />
-        <ellipse cx={60} cy={178} rx={6} ry={18} />
-      </Muscle>
-    </>
+function RegionShape({ region, score }: { region: Region; score: number | undefined }) {
+  const opacity = opacityFor(score);
+  const common = {
+    fill: "var(--accent)",
+    fillOpacity: opacity,
+    stroke: "var(--accent)",
+    strokeOpacity: opacity > 0 ? Math.min(1, opacity + 0.15) : 0,
+    strokeWidth: 2,
+  };
+  return region.shape === "ellipse" ? (
+    <ellipse cx={region.cx} cy={region.cy} rx={region.rx} ry={region.ry} {...common} />
+  ) : (
+    <path d={region.d} {...common} />
   );
 }
 
 function Silhouette({
   label,
+  src,
+  regions,
   scores,
-  children,
 }: {
   label: string;
+  src: string;
+  regions: Region[];
   scores: Record<MuscleGroup, number>;
-  children: (scores: Record<MuscleGroup, number>) => React.ReactNode;
 }) {
   return (
     <div style={{ textAlign: "center" }}>
-      <svg viewBox="0 0 100 220" style={{ width: "100%", maxWidth: 140 }} role="img" aria-label={`${label} view muscle diagram`}>
-        <BodyOutline />
-        {children(scores)}
-      </svg>
+      <div style={{ position: "relative", width: "100%", maxWidth: 170, margin: "0 auto" }}>
+        <img
+          src={src}
+          alt={`${label} view muscle anatomy`}
+          style={{ width: "100%", display: "block", filter: "grayscale(0.8) brightness(1.2) contrast(0.85)" }}
+        />
+        <svg
+          viewBox="0 0 1000 1400"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+          role="img"
+          aria-label={`${label} view muscle diagram`}
+        >
+          {regions.map((r, i) => (
+            <g key={i}>
+              <title>{MUSCLE_GROUP_LABELS[r.muscle]}</title>
+              <RegionShape region={r} score={scores[r.muscle]} />
+            </g>
+          ))}
+        </svg>
+      </div>
       <div className="text-dim" style={{ fontSize: 12, marginTop: 4 }}>
         {label}
       </div>
@@ -148,12 +128,8 @@ export default function BodyDiagram({ scores }: { scores: Record<MuscleGroup, nu
   return (
     <div>
       <div className="row" style={{ justifyContent: "center", gap: 24, flexWrap: "wrap" }}>
-        <Silhouette label="Front" scores={scores}>
-          {(s) => <FrontMuscles scores={s} />}
-        </Silhouette>
-        <Silhouette label="Back" scores={scores}>
-          {(s) => <BackMuscles scores={s} />}
-        </Silhouette>
+        <Silhouette label="Front" src="/muscle-front.svg" regions={FRONT_REGIONS} scores={scores} />
+        <Silhouette label="Back" src="/muscle-back.svg" regions={BACK_REGIONS} scores={scores} />
       </div>
       {worked.length > 0 && (
         <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 14, justifyContent: "center" }}>
@@ -164,6 +140,18 @@ export default function BodyDiagram({ scores }: { scores: Record<MuscleGroup, nu
           ))}
         </div>
       )}
+      <div className="text-faint" style={{ fontSize: 10, marginTop: 10, textAlign: "center" }}>
+        Muscle diagram by Termininja, Wikimedia Commons (
+        <a
+          href="https://creativecommons.org/licenses/by-sa/3.0/"
+          target="_blank"
+          rel="noreferrer"
+          style={{ color: "inherit" }}
+        >
+          CC BY-SA 3.0
+        </a>
+        )
+      </div>
     </div>
   );
 }

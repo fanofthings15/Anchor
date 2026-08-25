@@ -34,7 +34,7 @@ import ExerciseDetailModal from "../ExerciseDetailModal";
 import BodyDiagram from "../BodyDiagram";
 import ExercisePicker from "../ExercisePicker";
 
-type Tab = "workouts" | "food" | "weight" | "stats";
+type Tab = "workouts" | "routines" | "food" | "weight" | "stats";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // A dedicated drag-affordance element with its own dnd-kit listeners — so a drag never
@@ -69,7 +69,7 @@ const tooltipStyle = {
 const axisTick = { fill: "var(--text-dim)", fontSize: 11 };
 
 function isTab(value: string | null): value is Tab {
-  return value === "workouts" || value === "food" || value === "weight" || value === "stats";
+  return value === "workouts" || value === "routines" || value === "food" || value === "weight" || value === "stats";
 }
 
 export default function Workouts() {
@@ -92,6 +92,9 @@ export default function Workouts() {
         <button type="button" className={`tab ${tab === "workouts" ? "active" : ""}`} onClick={() => selectTab("workouts")}>
           Workouts
         </button>
+        <button type="button" className={`tab ${tab === "routines" ? "active" : ""}`} onClick={() => selectTab("routines")}>
+          Routines
+        </button>
         <button type="button" className={`tab ${tab === "food" ? "active" : ""}`} onClick={() => selectTab("food")}>
           Food
         </button>
@@ -104,6 +107,8 @@ export default function Workouts() {
       </div>
       {tab === "workouts" ? (
         <WorkoutsTab />
+      ) : tab === "routines" ? (
+        <RoutinesTab />
       ) : tab === "food" ? (
         <FoodTab />
       ) : tab === "weight" ? (
@@ -201,8 +206,6 @@ function WorkoutsTab() {
   const [quickDate, setQuickDate] = useState(() => todayISO());
   const [quickName, setQuickName] = useState("");
   const [startRoutineId, setStartRoutineId] = useState("");
-  const [showRoutines, setShowRoutines] = useState(false);
-  const [newRoutineName, setNewRoutineName] = useState("");
 
   useEffect(() => {
     load();
@@ -419,44 +422,6 @@ function WorkoutsTab() {
     setRoutineExercises((prev) => [...prev, ...created]);
   }
 
-  async function createRoutine(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newRoutineName.trim();
-    if (!name) return;
-    setNewRoutineName("");
-    const routine = await api.createRoutine(name);
-    setRoutines((prev) => [...prev, routine].sort((a, b) => a.name.localeCompare(b.name)));
-  }
-
-  async function deleteRoutine(id: string) {
-    await api.deleteRoutine(id);
-    setRoutines((prev) => prev.filter((r) => r.id !== id));
-    setRoutineExercises((prev) => prev.filter((ex) => ex.routine_id !== id));
-    if (startRoutineId === id) setStartRoutineId("");
-  }
-
-  async function addRoutineExercise(routineId: string, data: { name: string; sets?: number; reps?: number; weight?: number }) {
-    const exercise = await api.createRoutineExercise(routineId, data);
-    setRoutineExercises((prev) => [...prev, exercise]);
-  }
-
-  async function deleteRoutineExercise(id: string) {
-    await api.deleteRoutineExercise(id);
-    setRoutineExercises((prev) => prev.filter((ex) => ex.id !== id));
-  }
-
-  async function reorderRoutineExercises(routineId: string, orderedIds: string[]) {
-    setRoutineExercises((prev) => {
-      const order = new Map(orderedIds.map((id, i) => [id, i]));
-      return prev.map((ex) => (ex.routine_id === routineId && order.has(ex.id) ? { ...ex, sort_order: order.get(ex.id)! } : ex));
-    });
-    try {
-      await api.reorderRoutineExercises(routineId, orderedIds);
-    } catch {
-      load();
-    }
-  }
-
   // Datalist source for the "add exercise" name field — the curated library first, plus
   // any previously-logged custom name so old free-typed data keeps autocompleting too.
   const exerciseNames = useMemo(() => {
@@ -529,47 +494,6 @@ function WorkoutsTab() {
         )}
       </div>
 
-      <div className="row-between" style={{ marginBottom: showRoutines ? 10 : 16 }}>
-        <h2 style={{ margin: 0 }}>Routines</h2>
-        <button type="button" className="btn-icon" onClick={() => setShowRoutines((v) => !v)} aria-label="Toggle routines">
-          {showRoutines ? "▾" : "▸"}
-        </button>
-      </div>
-
-      {showRoutines && (
-        <div style={{ marginBottom: 16 }}>
-          <form className="quick-add" onSubmit={createRoutine}>
-            <input
-              type="text"
-              placeholder="New routine name…"
-              value={newRoutineName}
-              onChange={(e) => setNewRoutineName(e.target.value)}
-            />
-            <button className="btn btn-primary" type="submit">
-              Create
-            </button>
-          </form>
-          {routines.length === 0 ? (
-            <div className="empty-state">No routines yet — create one above, or save an existing workout as one below.</div>
-          ) : (
-            <div className="list">
-              {routines.map((r) => (
-                <RoutineCard
-                  key={r.id}
-                  routine={r}
-                  exercises={routineExercises.filter((ex) => ex.routine_id === r.id).sort((a, b) => a.sort_order - b.sort_order)}
-                  exerciseNames={exerciseNames}
-                  onAddExercise={(data) => addRoutineExercise(r.id, data)}
-                  onDeleteExercise={deleteRoutineExercise}
-                  onReorderExercises={(orderedIds) => reorderRoutineExercises(r.id, orderedIds)}
-                  onDelete={() => deleteRoutine(r.id)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       <div id="workout-day-list">
       {loading ? (
         <div className="empty-state">Loading…</div>
@@ -602,6 +526,122 @@ function WorkoutsTab() {
         </div>
       )}
       </div>
+    </div>
+  );
+}
+
+// Routine templates get their own tab, separate from the daily workout log — creating
+// and editing them is a config-like activity, not a day-to-day logging one, and it was
+// crowding the Workouts page (which still keeps the lightweight "start from a routine"
+// dropdown, since that IS a daily action). Fetches independently, same as every other
+// tab in this file — not shared state with WorkoutsTab.
+function RoutinesTab() {
+  const [routines, setRoutines] = useState<WorkoutRoutine[]>([]);
+  const [routineExercises, setRoutineExercises] = useState<WorkoutRoutineExercise[]>([]);
+  const [loggedNames, setLoggedNames] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newRoutineName, setNewRoutineName] = useState("");
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [routineData, workoutData] = await Promise.all([api.getRoutines(), api.getWorkouts()]);
+      setRoutines(routineData.routines);
+      setRoutineExercises(routineData.exercises);
+      const names = new Map<string, string>();
+      for (const ex of workoutData.exercises) {
+        const key = ex.name.trim().toLowerCase();
+        if (key && !names.has(key)) names.set(key, ex.name.trim());
+      }
+      setLoggedNames(Array.from(names.values()));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const exerciseNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const n of EXERCISE_LIBRARY_NAMES) names.set(n.toLowerCase(), n);
+    for (const n of loggedNames) if (!names.has(n.toLowerCase())) names.set(n.toLowerCase(), n);
+    return Array.from(names.values()).sort((a, b) => a.localeCompare(b));
+  }, [loggedNames]);
+
+  async function createRoutine(e: React.FormEvent) {
+    e.preventDefault();
+    const name = newRoutineName.trim();
+    if (!name) return;
+    setNewRoutineName("");
+    const routine = await api.createRoutine(name);
+    setRoutines((prev) => [...prev, routine].sort((a, b) => a.name.localeCompare(b.name)));
+  }
+
+  async function deleteRoutine(id: string) {
+    await api.deleteRoutine(id);
+    setRoutines((prev) => prev.filter((r) => r.id !== id));
+    setRoutineExercises((prev) => prev.filter((ex) => ex.routine_id !== id));
+  }
+
+  async function addRoutineExercise(routineId: string, data: { name: string; sets?: number; reps?: number; weight?: number }) {
+    const exercise = await api.createRoutineExercise(routineId, data);
+    setRoutineExercises((prev) => [...prev, exercise]);
+  }
+
+  async function deleteRoutineExercise(id: string) {
+    await api.deleteRoutineExercise(id);
+    setRoutineExercises((prev) => prev.filter((ex) => ex.id !== id));
+  }
+
+  async function reorderRoutineExercises(routineId: string, orderedIds: string[]) {
+    setRoutineExercises((prev) => {
+      const order = new Map(orderedIds.map((id, i) => [id, i]));
+      return prev.map((ex) => (ex.routine_id === routineId && order.has(ex.id) ? { ...ex, sort_order: order.get(ex.id)! } : ex));
+    });
+    try {
+      await api.reorderRoutineExercises(routineId, orderedIds);
+    } catch {
+      load();
+    }
+  }
+
+  if (loading) {
+    return <div className="empty-state">Loading…</div>;
+  }
+
+  return (
+    <div>
+      <form className="quick-add" onSubmit={createRoutine} style={{ marginBottom: 16 }}>
+        <input
+          type="text"
+          placeholder="New routine name…"
+          value={newRoutineName}
+          onChange={(e) => setNewRoutineName(e.target.value)}
+        />
+        <button className="btn btn-primary" type="submit">
+          Create
+        </button>
+      </form>
+      {routines.length === 0 ? (
+        <div className="empty-state">No routines yet — create one above, or save an existing workout as one from the Workouts tab.</div>
+      ) : (
+        <div className="list">
+          {routines.map((r) => (
+            <RoutineCard
+              key={r.id}
+              routine={r}
+              exercises={routineExercises.filter((ex) => ex.routine_id === r.id).sort((a, b) => a.sort_order - b.sort_order)}
+              exerciseNames={exerciseNames}
+              onAddExercise={(data) => addRoutineExercise(r.id, data)}
+              onDeleteExercise={deleteRoutineExercise}
+              onReorderExercises={(orderedIds) => reorderRoutineExercises(r.id, orderedIds)}
+              onDelete={() => deleteRoutine(r.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

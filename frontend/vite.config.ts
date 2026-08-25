@@ -27,6 +27,11 @@ export default defineConfig({
         // falls back to the cached app shell and lets react-router take over client-side.
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api/],
+        // The Stats page's muscle diagram reference images (~1.2-1.4MB each) — excluded
+        // from precache so the PWA install/update footprint stays small; the browser's
+        // normal HTTP cache still keeps them around after the first view, same as any
+        // other <img>. Everything else stays fully offline-capable as before.
+        globIgnores: ["**/muscle-front.svg", "**/muscle-back.svg"],
         runtimeCaching: [
           {
             // GET only, deliberately — a write (POST/PATCH/DELETE) must never be served
