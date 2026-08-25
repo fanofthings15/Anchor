@@ -34,7 +34,7 @@ import ExerciseDetailModal from "../ExerciseDetailModal";
 import BodyDiagram, { type MuscleState } from "../BodyDiagram";
 import ExercisePicker from "../ExercisePicker";
 
-type Tab = "workouts" | "routines" | "food" | "weight" | "stats";
+type Tab = "workouts" | "food" | "weight" | "stats";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 // A dedicated drag-affordance element with its own dnd-kit listeners — so a drag never
@@ -69,7 +69,7 @@ const tooltipStyle = {
 const axisTick = { fill: "var(--text-dim)", fontSize: 11 };
 
 function isTab(value: string | null): value is Tab {
-  return value === "workouts" || value === "routines" || value === "food" || value === "weight" || value === "stats";
+  return value === "workouts" || value === "food" || value === "weight" || value === "stats";
 }
 
 export default function Workouts() {
@@ -92,9 +92,6 @@ export default function Workouts() {
         <button type="button" className={`tab ${tab === "workouts" ? "active" : ""}`} onClick={() => selectTab("workouts")}>
           Workouts
         </button>
-        <button type="button" className={`tab ${tab === "routines" ? "active" : ""}`} onClick={() => selectTab("routines")}>
-          Routines
-        </button>
         <button type="button" className={`tab ${tab === "food" ? "active" : ""}`} onClick={() => selectTab("food")}>
           Food
         </button>
@@ -107,8 +104,6 @@ export default function Workouts() {
       </div>
       {tab === "workouts" ? (
         <WorkoutsTab />
-      ) : tab === "routines" ? (
-        <RoutinesTab />
       ) : tab === "food" ? (
         <FoodTab />
       ) : tab === "weight" ? (
@@ -1755,6 +1750,11 @@ function StatsTab() {
             ))}
         </div>
       )}
+
+      <h2>Routines</h2>
+      <div style={{ marginBottom: 24 }}>
+        <RoutinesTab />
+      </div>
 
       <h2>Calorie trend (14 days)</h2>
       <div className="chart-container">

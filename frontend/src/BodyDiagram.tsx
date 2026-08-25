@@ -8,11 +8,13 @@ import { MUSCLE_GROUP_LABELS, type MuscleGroup } from "./exerciseLibrary";
 // a plain gray — set-based, not volume-based, so a Push-Up marks chest blue and
 // triceps/shoulders/abs gray regardless of how many sets/reps were actually done.
 //
-// Limb muscles (biceps/triceps/forearms) are modeled as separate left/right regions in
-// this library and need an explicit side to pick up a color at all — torso/leg muscles
-// don't. One known cosmetic quirk: the back view's right triceps renders a visibly
-// duller shade than the left for the same color/style props — a rendering quirk in the
-// library itself, not something reachable from this component's props.
+// Limb muscles (biceps/triceps/forearms) are modeled as separate left/right SVG paths
+// under one shared slug in this library. Passing one data entry per slug with no `side`
+// colors both paths — passing an explicit side (or two entries, one per side) instead
+// backfires: the library resolves "does the other side need to be blanked back to
+// default?" via `data.find(d => d.slug === slug)`, which only ever inspects the FIRST
+// matching entry for that slug. With two entries that first one's side always wins,
+// permanently blanking the other side back to gray no matter what color it was given.
 
 export type MuscleState = "primary" | "secondary" | "none";
 
@@ -55,22 +57,13 @@ const BACK_SLUGS: Partial<Record<MuscleGroup, Slug[]>> = {
   calves: ["calves"],
 };
 
-// These need an explicit side (both, since a workout doesn't track single-arm data) or
-// this library's arm regions don't take a fill at all.
-const SIDED_SLUGS = new Set<Slug>(["biceps", "triceps", "forearm"]);
-
 function bodyData(slugMap: Partial<Record<MuscleGroup, Slug[]>>, states: Record<MuscleGroup, MuscleState>): ExtendedBodyPart[] {
   const parts: ExtendedBodyPart[] = [HEAD_OVERRIDE];
   for (const [muscle, slugs] of Object.entries(slugMap) as [MuscleGroup, Slug[]][]) {
     const color = colorFor(states[muscle]);
     if (!color) continue;
     for (const slug of slugs) {
-      if (SIDED_SLUGS.has(slug)) {
-        parts.push({ slug, side: "left", styles: { fill: color } });
-        parts.push({ slug, side: "right", styles: { fill: color } });
-      } else {
-        parts.push({ slug, styles: { fill: color } });
-      }
+      parts.push({ slug, styles: { fill: color } });
     }
   }
   return parts;
