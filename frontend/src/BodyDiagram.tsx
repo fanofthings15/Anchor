@@ -16,13 +16,16 @@ import { MUSCLE_GROUP_LABELS, type MuscleGroup } from "./exerciseLibrary";
 
 export type MuscleState = "primary" | "secondary" | "none";
 
-const BODY_GRAY = "#3a4152";
+// The library's own baseline gray, baked into every unhighlighted muscle region — the
+// `defaultFill` prop doesn't actually reach them (confirmed by inspecting the rendered
+// fill: it's this value regardless of what defaultFill is set to). Matched here rather
+// than guessed, so the head lines up with what every other unworked muscle really is.
+const BODY_GRAY = "#3f3f3f";
 const PRIMARY_COLOR = "var(--accent)";
 const SECONDARY_COLOR = "var(--text-dim)";
 
-// The library's own head artwork bakes in a fixed light-gray fill (#bebebe) that
-// doesn't come from — and isn't overridable via — defaultFill, so it reads as a
-// lighter, oddly-toned patch against the rest of the body unless explicitly matched.
+// The library's own head artwork bakes in a fixed light-gray fill (#bebebe) instead,
+// so it reads as an oddly lighter patch against the rest of the body unless matched.
 const HEAD_OVERRIDE: ExtendedBodyPart = { slug: "head", styles: { fill: BODY_GRAY } };
 
 function colorFor(state: MuscleState | undefined): string | undefined {
