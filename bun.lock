@@ -26,6 +26,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "react": "^18.3.1",
         "react-dom": "^18.3.1",
+        "react-muscle-highlighter": "^1.2.0",
         "react-router-dom": "^6.28.0",
         "recharts": "^2.13.3",
         "workbox-window": "^7.4.1",
@@ -838,6 +839,8 @@
     "react-dom": ["react-dom@18.3.1", "", { "dependencies": { "loose-envify": "^1.1.0", "scheduler": "^0.23.2" }, "peerDependencies": { "react": "^18.3.1" } }, "sha512-5m4nQKp+rZRb09LNH59GM4BxTh9251/ylbKIbpe7TpGxfJ+9kv6BLkLBXIjjspbgbnIBNqlI23tRnTWT0snUIw=="],
 
     "react-is": ["react-is@18.3.1", "", {}, "sha512-/LLMVyas0ljjAtoYiPqYiL8VWXzUUdThrmU5+n20DZv+a+ClRoevUzw5JxU+Ieh5/c87ytoTBV9G1FiKfNJdmg=="],
+
+    "react-muscle-highlighter": ["react-muscle-highlighter@1.2.0", "", { "peerDependencies": { "react": "^18.0.0 || ^19.0.0", "react-dom": "^18.0.0 || ^19.0.0" } }, "sha512-jyQOy0PH8sYt221VnQhejYZvJsqpKNzYzNmC9yt+CWJRf0qmegNSxDgSVT2wi90//Pdebm5xVvYjA2qxM2E3rg=="],
 
     "react-refresh": ["react-refresh@0.17.0", "", {}, "sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ=="],
 
