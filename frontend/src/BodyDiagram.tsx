@@ -89,8 +89,8 @@ export default function BodyDiagram({ scores }: { scores: Record<MuscleGroup, nu
       </div>
       {worked.length > 0 && (
         <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 14, justifyContent: "center" }}>
-          {worked.map(([muscle, score]) => (
-            <span key={muscle} className={score >= 0.6 ? "chip chip-accent" : "chip"}>
+          {worked.map(([muscle]) => (
+            <span key={muscle} className="chip chip-accent">
               {MUSCLE_GROUP_LABELS[muscle]}
             </span>
           ))}
