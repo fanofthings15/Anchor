@@ -37,6 +37,8 @@ export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
   calves: "Calves",
 };
 
+export const ALL_MUSCLE_GROUPS = Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[];
+
 export interface ExerciseDef {
   name: string;
   type: "strength" | "cardio";
