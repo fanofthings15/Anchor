@@ -1,6 +1,6 @@
-export type Recurrence = "none" | "daily" | "weekly" | "monthly" | "yearly" | "custom";
+export type Recurrence = "none" | "daily" | "weekly" | "biweekly" | "monthly" | "yearly" | "custom";
 
-export const RECURRENCE_VALUES: Recurrence[] = ["none", "daily", "weekly", "monthly", "yearly", "custom"];
+export const RECURRENCE_VALUES: Recurrence[] = ["none", "daily", "weekly", "biweekly", "monthly", "yearly", "custom"];
 
 function addDays(date: Date, days: number): Date {
   const d = new Date(date);
@@ -33,6 +33,8 @@ export function computeNextDue(recurrence: Recurrence, intervalDays: number | nu
       return addDays(fromDate, 1).toISOString();
     case "weekly":
       return addDays(fromDate, 7).toISOString();
+    case "biweekly":
+      return addDays(fromDate, 14).toISOString();
     case "monthly":
       return addMonths(fromDate, 1).toISOString();
     case "yearly":

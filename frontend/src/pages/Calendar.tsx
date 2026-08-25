@@ -46,6 +46,16 @@ function eventDayKeys(e: CalendarEvent): string[] {
   return keys.length > 0 ? keys : [startDay.toDateString()];
 }
 
+// next_due_at is stored as UTC midnight of the intended calendar day (see Cleaning.tsx),
+// so parsing it with `new Date(iso)` and reading local getters — as this used to — shifts
+// the day back by one in any timezone behind UTC. Read the Y/M/D straight out of the ISO
+// string's first 10 characters instead, then build a local Date from those components so
+// the key matches the local Date keys used everywhere else in this grid.
+function taskDayKey(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return new Date(y, m - 1, d).toDateString();
+}
+
 export default function Calendar() {
   const [viewDate, setViewDate] = useState(() => new Date());
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -115,7 +125,7 @@ export default function Calendar() {
   const tasksByDay = useMemo(() => {
     const map = new Map<string, RecurringTask[]>();
     for (const t of tasks) {
-      const key = new Date(t.next_due_at).toDateString();
+      const key = taskDayKey(t.next_due_at);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(t);
     }

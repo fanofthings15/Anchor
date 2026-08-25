@@ -116,7 +116,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
-export type Recurrence = "none" | "daily" | "weekly" | "monthly" | "yearly" | "custom";
+export type Recurrence = "none" | "daily" | "weekly" | "biweekly" | "monthly" | "yearly" | "custom";
 export type Priority = "low" | "normal" | "high";
 
 export interface Note {

@@ -7,6 +7,7 @@ const RECURRENCE_LABELS: Record<Recurrence, string> = {
   none: "One-off",
   daily: "Daily",
   weekly: "Weekly",
+  biweekly: "Biweekly",
   monthly: "Monthly",
   yearly: "Yearly",
   custom: "Custom",
@@ -188,6 +189,7 @@ export default function Cleaning() {
               <option value="none">Never (one-off)</option>
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
+              <option value="biweekly">Biweekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
               <option value="custom">Custom</option>
@@ -260,6 +262,7 @@ export default function Cleaning() {
                       <option value="none">Never (one-off)</option>
                       <option value="daily">Daily</option>
                       <option value="weekly">Weekly</option>
+                      <option value="biweekly">Biweekly</option>
                       <option value="monthly">Monthly</option>
                       <option value="yearly">Yearly</option>
                       <option value="custom">Custom</option>
