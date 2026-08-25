@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { findExercise, MUSCLE_GROUP_LABELS } from "./exerciseLibrary";
-import MovementAnimation from "./MovementAnimation";
 
 export default function ExerciseDetailModal({ name, onClose }: { name: string; onClose: () => void }) {
   const def = findExercise(name);
@@ -27,9 +26,7 @@ export default function ExerciseDetailModal({ name, onClose }: { name: string; o
           <div className="empty-state">Custom exercise — no form guide available.</div>
         ) : (
           <>
-            <MovementAnimation pattern={def.pattern} />
-
-            <div className="row" style={{ flexWrap: "wrap", gap: 6, marginTop: 14, marginBottom: 14 }}>
+            <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
               {def.primary.map((m) => (
                 <span key={m} className="chip chip-accent">
                   {MUSCLE_GROUP_LABELS[m]}

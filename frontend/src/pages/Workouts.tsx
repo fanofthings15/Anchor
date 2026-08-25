@@ -29,10 +29,10 @@ import { addDaysISO, buildMonthGrid, computeStreaks, sameDay, todayISO } from ".
 import { EXERCISE_LIBRARY_NAMES, findExercise, type MuscleGroup } from "../exerciseLibrary";
 import ExerciseDetailModal from "../ExerciseDetailModal";
 import BodyDiagram from "../BodyDiagram";
+import ExercisePicker from "../ExercisePicker";
 
 type Tab = "workouts" | "food" | "weight" | "stats";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const EXERCISE_NAME_LIST_ID = "exercise-name-list";
 
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -432,12 +432,6 @@ function WorkoutsTab() {
 
   return (
     <div>
-      <datalist id={EXERCISE_NAME_LIST_ID}>
-        {exerciseNames.map((n) => (
-          <option key={n} value={n} />
-        ))}
-      </datalist>
-
       <StreakCalendar activeDates={workoutDates} selectedDate={quickDate} onSelectDay={selectCalendarDay} />
 
       <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
@@ -504,6 +498,7 @@ function WorkoutsTab() {
                   key={r.id}
                   routine={r}
                   exercises={routineExercises.filter((ex) => ex.routine_id === r.id).sort((a, b) => a.sort_order - b.sort_order)}
+                  exerciseNames={exerciseNames}
                   onAddExercise={(data) => addRoutineExercise(r.id, data)}
                   onDeleteExercise={deleteRoutineExercise}
                   onDelete={() => deleteRoutine(r.id)}
@@ -526,6 +521,7 @@ function WorkoutsTab() {
               key={w.id}
               workout={w}
               exercises={exercises.filter((ex) => ex.workout_id === w.id).sort((a, b) => a.sort_order - b.sort_order)}
+              exerciseNames={exerciseNames}
               sets={sets}
               getPreviousSets={(exerciseName) => getPreviousSets(exerciseName, w.id)}
               expanded={expandedId === w.id}
@@ -549,12 +545,14 @@ function WorkoutsTab() {
 function RoutineCard({
   routine,
   exercises,
+  exerciseNames,
   onAddExercise,
   onDeleteExercise,
   onDelete,
 }: {
   routine: WorkoutRoutine;
   exercises: WorkoutRoutineExercise[];
+  exerciseNames: string[];
   onAddExercise: (data: { name: string; sets?: number; reps?: number; weight?: number }) => void;
   onDeleteExercise: (id: string) => void;
   onDelete: () => void;
@@ -624,14 +622,7 @@ function RoutineCard({
             </div>
           )}
           <form className="row" style={{ flexWrap: "wrap", marginTop: 10, gap: 8 }} onSubmit={submit}>
-            <input
-              type="text"
-              list={EXERCISE_NAME_LIST_ID}
-              placeholder="Exercise name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={{ flex: "1 1 140px" }}
-            />
+            <ExercisePicker value={name} onChange={setName} options={exerciseNames} placeholder="Exercise name" style={{ flex: "1 1 140px" }} />
             <input type="number" placeholder="Sets" value={sets} onChange={(e) => setSets(e.target.value)} style={{ width: 72 }} />
             <input type="number" placeholder="Reps" value={reps} onChange={(e) => setReps(e.target.value)} style={{ width: 72 }} />
             <input
@@ -858,6 +849,7 @@ function ExerciseBlock({
 function WorkoutCard({
   workout,
   exercises,
+  exerciseNames,
   sets,
   getPreviousSets,
   expanded,
@@ -872,6 +864,7 @@ function WorkoutCard({
 }: {
   workout: Workout;
   exercises: WorkoutExercise[];
+  exerciseNames: string[];
   sets: WorkoutSet[];
   getPreviousSets: (exerciseName: string) => WorkoutSet[];
   expanded: boolean;
@@ -985,14 +978,7 @@ function WorkoutCard({
           )}
 
           <form className="quick-add" onSubmit={submit} style={{ flexWrap: "wrap" }}>
-            <input
-              type="text"
-              list={EXERCISE_NAME_LIST_ID}
-              placeholder="Exercise name"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              style={{ flex: "1 1 140px" }}
-            />
+            <ExercisePicker value={name} onChange={handleNameChange} options={exerciseNames} placeholder="Exercise name" style={{ flex: "1 1 140px" }} />
             <select
               value={exerciseType}
               onChange={(e) => {

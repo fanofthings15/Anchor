@@ -920,6 +920,39 @@ button {
   width: 200px;
 }
 
+/* Exercise picker dropdown (see ExercisePicker.tsx) — a custom combobox rather than a
+   native <input list=datalist>, since datalist suggestions never render on iOS Safari. */
+.exercise-picker-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.exercise-picker-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.exercise-picker-option:hover,
+.exercise-picker-option:active {
+  background: var(--bg-card);
+}
+
 /* Exercise detail modal — the app's only full-screen modal, so this pattern isn't shared
    with anything else. Sits above the fixed top/bottom nav bars (z-index 40/50). */
 .exercise-modal-backdrop {
@@ -952,130 +985,6 @@ button {
   flex-direction: column;
   gap: 6px;
   font-size: 14px;
-}
-
-/* Movement animations — simple looping stick-figure diagrams shown in the exercise
-   detail modal (see MovementAnimation.tsx). One group per pattern (not per exercise)
-   gets an animated CSS class; transform-origin values are set inline per-element in
-   SVG user-unit coordinates (matching the component's 100x100 viewBox). */
-.movement-animation {
-  width: 100%;
-  max-width: 160px;
-  aspect-ratio: 1;
-  display: block;
-  margin: 0 auto;
-}
-
-.mv-anim-press,
-.mv-anim-press-mirror {
-  animation: mv-press 1.6s ease-in-out infinite;
-}
-.mv-anim-press-mirror {
-  animation-name: mv-press-mirror;
-}
-@keyframes mv-press {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-35deg); }
-}
-@keyframes mv-press-mirror {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(35deg); }
-}
-
-.mv-anim-pull,
-.mv-anim-pull-mirror {
-  animation: mv-pull 1.6s ease-in-out infinite;
-}
-.mv-anim-pull-mirror {
-  animation-name: mv-pull-mirror;
-}
-@keyframes mv-pull {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-75deg); }
-}
-@keyframes mv-pull-mirror {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(75deg); }
-}
-
-.mv-anim-squat {
-  animation: mv-squat 1.8s ease-in-out infinite;
-  transform-origin: 50px 58px;
-}
-@keyframes mv-squat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(10px); }
-}
-
-.mv-anim-hinge {
-  animation: mv-hinge 1.8s ease-in-out infinite;
-}
-@keyframes mv-hinge {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-30deg); }
-}
-
-.mv-anim-curl {
-  animation: mv-curl 1.4s ease-in-out infinite;
-}
-.mv-anim-curl-mirror {
-  animation: mv-curl-mirror 1.4s ease-in-out infinite;
-}
-@keyframes mv-curl {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-110deg); }
-}
-@keyframes mv-curl-mirror {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(110deg); }
-}
-
-.mv-anim-raise,
-.mv-anim-raise-mirror {
-  animation: mv-raise 1.6s ease-in-out infinite;
-}
-.mv-anim-raise-mirror {
-  animation-name: mv-raise-mirror;
-}
-@keyframes mv-raise {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(60deg); }
-}
-@keyframes mv-raise-mirror {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-60deg); }
-}
-
-.mv-anim-core {
-  animation: mv-core-torso 1.8s ease-in-out infinite;
-  transform-origin: 50px 58px;
-}
-.mv-anim-core-legs {
-  animation: mv-core-legs 1.8s ease-in-out infinite;
-}
-@keyframes mv-core-torso {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(8deg); }
-}
-@keyframes mv-core-legs {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(-14deg); }
-}
-
-.mv-anim-cardio-front,
-.mv-anim-cardio-back {
-  animation: mv-cardio-front 0.9s ease-in-out infinite;
-}
-.mv-anim-cardio-back {
-  animation-name: mv-cardio-back;
-}
-@keyframes mv-cardio-front {
-  0%, 100% { transform: rotate(-25deg); }
-  50% { transform: rotate(25deg); }
-}
-@keyframes mv-cardio-back {
-  0%, 100% { transform: rotate(25deg); }
-  50% { transform: rotate(-25deg); }
 }
 
 .confirm-menu-text {
