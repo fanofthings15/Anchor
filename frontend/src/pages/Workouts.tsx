@@ -26,13 +26,13 @@ import {
   type WorkoutSet,
 } from "../api/client";
 import { addDaysISO, buildMonthGrid, computeStreaks, sameDay, todayISO } from "../calendarUtils";
+import { EXERCISE_LIBRARY_NAMES, findExercise, type MuscleGroup } from "../exerciseLibrary";
+import ExerciseDetailModal from "../ExerciseDetailModal";
+import BodyDiagram from "../BodyDiagram";
 
 type Tab = "workouts" | "food" | "weight" | "stats";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const EXERCISE_NAME_LIST_ID = "exercise-name-list";
-// Names that default to the cardio (distance/time) set type when typed into an exercise
-// name field — same set the backend's legacy-data migration reclassifies.
-const CARDIO_EXERCISE_NAMES = new Set(["treadmill", "walking"]);
 
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -397,8 +397,11 @@ function WorkoutsTab() {
     setRoutineExercises((prev) => prev.filter((ex) => ex.id !== id));
   }
 
+  // Datalist source for the "add exercise" name field — the curated library first, plus
+  // any previously-logged custom name so old free-typed data keeps autocompleting too.
   const exerciseNames = useMemo(() => {
     const names = new Map<string, string>();
+    for (const n of EXERCISE_LIBRARY_NAMES) names.set(n.toLowerCase(), n);
     for (const ex of exercises) {
       const key = ex.name.trim().toLowerCase();
       if (key && !names.has(key)) names.set(key, ex.name.trim());
@@ -786,6 +789,7 @@ function ExerciseBlock({
   onDeleteSet: (id: string) => void;
 }) {
   const isCardio = exercise.exercise_type === "cardio";
+  const [showDetail, setShowDetail] = useState(false);
 
   // A new set starts from whatever the last set in this exercise already has — if this
   // is the very first set, it falls back to the same slot from the previous time this
@@ -806,11 +810,19 @@ function ExerciseBlock({
   return (
     <div className="card" style={{ marginBottom: 10 }}>
       <div className="row-between" style={{ marginBottom: sets.length > 0 ? 10 : 0 }}>
-        <strong>{exercise.name}</strong>
+        <button
+          type="button"
+          style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 700, textAlign: "left" }}
+          onClick={() => setShowDetail(true)}
+        >
+          {exercise.name}
+        </button>
         <button type="button" className="btn-icon text-danger" onClick={onDelete} aria-label={`Delete ${exercise.name}`}>
           ✕
         </button>
       </div>
+
+      {showDetail && <ExerciseDetailModal name={exercise.name} onClose={() => setShowDetail(false)} />}
 
       {sets.length > 0 && (
         <div className="sets-table">
@@ -887,7 +899,7 @@ function WorkoutCard({
   function handleNameChange(v: string) {
     setName(v);
     if (!typeTouched) {
-      setExerciseType(CARDIO_EXERCISE_NAMES.has(v.trim().toLowerCase()) ? "cardio" : "strength");
+      setExerciseType(findExercise(v)?.type === "cardio" ? "cardio" : "strength");
     }
   }
 
@@ -1437,6 +1449,55 @@ function StatsTab() {
     return m;
   }, [workouts]);
 
+  // This calendar week (Sunday-Saturday, matching the convention already established in
+  // backend/src/routes/today.ts's recap), scored per muscle group from every completed
+  // set logged in that window: full weight to an exercise's primary muscles, half weight
+  // to its secondary ones, then normalized 0-1 against the week's most-worked muscle so
+  // the diagram's shading is always relative rather than tied to an absolute volume
+  // number that means nothing on its own. A logged exercise with no library match (a
+  // custom typed name) simply contributes nothing, same tradeoff as the detail modal.
+  const weekMuscleScores = useMemo(() => {
+    const today = todayISO();
+    const weekStart = addDaysISO(today, -new Date(`${today}T00:00:00`).getDay());
+    const weekWorkoutIds = new Set(
+      workouts.filter((w) => w.workout_date >= weekStart && w.workout_date <= today).map((w) => w.id)
+    );
+
+    const raw = {
+      chest: 0,
+      back: 0,
+      shoulders: 0,
+      biceps: 0,
+      triceps: 0,
+      forearms: 0,
+      abs: 0,
+      obliques: 0,
+      quads: 0,
+      hamstrings: 0,
+      glutes: 0,
+      calves: 0,
+    } as Record<MuscleGroup, number>;
+
+    for (const ex of exercises) {
+      if (!weekWorkoutIds.has(ex.workout_id)) continue;
+      const def = findExercise(ex.name);
+      if (!def) continue;
+      for (const s of sets) {
+        if (s.exercise_id !== ex.id || !s.completed) continue;
+        const volume = s.weight != null && s.reps != null ? s.weight * s.reps : 1;
+        for (const m of def.primary) raw[m] += volume;
+        for (const m of def.secondary) raw[m] += volume * 0.5;
+      }
+    }
+
+    const max = Math.max(1, ...Object.values(raw));
+    const scores = {} as Record<MuscleGroup, number>;
+    for (const m of Object.keys(raw) as MuscleGroup[]) scores[m] = raw[m] / max;
+    return scores;
+  }, [workouts, exercises, sets]);
+
+  const hasWeekMuscleData = Object.values(weekMuscleScores).some((v) => v > 0);
+
   // Weight-over-time only makes sense for strength exercises — cardio ones track
   // distance/duration instead, so they're left out of this dropdown.
   const exerciseNames = useMemo(() => {
@@ -1500,6 +1561,15 @@ function StatsTab() {
 
   return (
     <div>
+      <h2>Muscles worked this week</h2>
+      <div className="card" style={{ marginBottom: 24 }}>
+        {hasWeekMuscleData ? (
+          <BodyDiagram scores={weekMuscleScores} />
+        ) : (
+          <div className="empty-state">No workouts logged this week yet.</div>
+        )}
+      </div>
+
       <h2>Workout Progress</h2>
       {exerciseNames.length === 0 ? (
         <div className="empty-state">No strength exercises logged yet.</div>
