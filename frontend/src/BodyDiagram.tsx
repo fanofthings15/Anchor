@@ -97,7 +97,7 @@ function Silhouette({
         <img
           src={src}
           alt={`${label} view muscle anatomy`}
-          style={{ width: "100%", display: "block", filter: "grayscale(0.8) brightness(1.2) contrast(0.85)" }}
+          style={{ width: "100%", display: "block", filter: "grayscale(1) brightness(1.35) contrast(0.9)" }}
         />
         <svg
           viewBox="0 0 1000 1400"
