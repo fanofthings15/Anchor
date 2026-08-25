@@ -508,6 +508,13 @@ export const api = {
   createWorkoutExercise: (workoutId: string, data: { name: string; notes?: string; exercise_type?: ExerciseType }) =>
     request<WorkoutExercise>(`/workouts/${workoutId}/exercises`, { method: "POST", body: JSON.stringify(data) }),
   deleteWorkoutExercise: (id: string) => request<{ ok: true }>(`/workouts/exercises/${id}`, { method: "DELETE" }),
+  updateWorkoutExerciseNotes: (id: string, notes: string) =>
+    request<WorkoutExercise>(`/workouts/exercises/${id}`, { method: "PATCH", body: JSON.stringify({ notes }) }),
+  reorderWorkoutExercises: (workoutId: string, orderedIds: string[]) =>
+    request<WorkoutExercise[]>(`/workouts/${workoutId}/exercises/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify({ ordered_ids: orderedIds }),
+    }),
   createWorkoutSet: (
     exerciseId: string,
     data: {
@@ -537,6 +544,11 @@ export const api = {
   createRoutineExercise: (routineId: string, data: { name: string; sets?: number; reps?: number; weight?: number }) =>
     request<WorkoutRoutineExercise>(`/routines/${routineId}/exercises`, { method: "POST", body: JSON.stringify(data) }),
   deleteRoutineExercise: (id: string) => request<{ ok: true }>(`/routines/exercises/${id}`, { method: "DELETE" }),
+  reorderRoutineExercises: (routineId: string, orderedIds: string[]) =>
+    request<WorkoutRoutineExercise[]>(`/routines/${routineId}/exercises/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify({ ordered_ids: orderedIds }),
+    }),
 
   // Meals
   listMeals: (from: string, to: string) =>

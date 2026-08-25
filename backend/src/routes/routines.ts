@@ -107,6 +107,26 @@ routinesRouter.post("/:routineId/exercises", (req, res) => {
   res.status(201).json(serializeExercise(row));
 });
 
+// PATCH /api/routines/:routineId/exercises/reorder — persist a new exercise order
+// within one routine template (drag-and-drop).
+routinesRouter.patch("/:routineId/exercises/reorder", (req, res) => {
+  const { ordered_ids } = req.body ?? {};
+  if (!Array.isArray(ordered_ids) || ordered_ids.some((id) => typeof id !== "string")) {
+    res.status(400).json({ error: "ordered_ids must be an array of exercise ids" });
+    return;
+  }
+  const update = db.query(
+    "UPDATE workout_routine_exercises SET sort_order = ? WHERE id = ? AND user_id = ? AND routine_id = ?"
+  );
+  ordered_ids.forEach((id: string, index: number) => update.run(index, id, req.uid, req.params.routineId));
+  const exercises = db
+    .query<RoutineExerciseRow, [string, string]>(
+      "SELECT * FROM workout_routine_exercises WHERE user_id = ? AND routine_id = ? ORDER BY sort_order ASC"
+    )
+    .all(req.uid, req.params.routineId);
+  res.json(exercises.map(serializeExercise));
+});
+
 routinesRouter.delete("/exercises/:id", (req, res) => {
   db.query("DELETE FROM workout_routine_exercises WHERE id = ? AND user_id = ?").run(req.params.id, req.uid);
   res.json({ ok: true });

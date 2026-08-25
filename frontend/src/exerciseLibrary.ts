@@ -48,7 +48,7 @@ export interface ExerciseDef {
 export const EXERCISE_LIBRARY: ExerciseDef[] = [
   // Chest / press
   {
-    name: "Barbell Bench Press",
+    name: "Bench Press (Barbell)",
     type: "strength",
     primary: ["chest"],
     secondary: ["triceps", "shoulders"],
@@ -59,7 +59,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Dumbbell Bench Press",
+    name: "Bench Press (Dumbbell)",
     type: "strength",
     primary: ["chest"],
     secondary: ["triceps", "shoulders"],
@@ -81,7 +81,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Chest Press Machine",
+    name: "Chest Press (Machine)",
     type: "strength",
     primary: ["chest"],
     secondary: ["triceps", "shoulders"],
@@ -103,7 +103,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Chest Fly",
+    name: "Chest Fly (Dumbbell)",
     type: "strength",
     primary: ["chest"],
     secondary: ["shoulders"],
@@ -217,7 +217,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Lat Pulldown",
+    name: "Lat Pulldown (Wide Grip)",
     type: "strength",
     primary: ["back"],
     secondary: ["biceps"],
@@ -250,7 +250,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Seated Row",
+    name: "Seated Row (Machine)",
     type: "strength",
     primary: ["back"],
     secondary: ["biceps"],
@@ -272,7 +272,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Single-Arm Dumbbell Row",
+    name: "Dumbbell Row",
     type: "strength",
     primary: ["back"],
     secondary: ["biceps"],
@@ -285,7 +285,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
 
   // Arms
   {
-    name: "Bicep Curl",
+    name: "Bicep Curl (Dumbbell)",
     type: "strength",
     primary: ["biceps"],
     secondary: ["forearms"],
@@ -329,7 +329,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Tricep Pushdown",
+    name: "Tricep Pushdown (Bar)",
     type: "strength",
     primary: ["triceps"],
     secondary: [],
@@ -375,7 +375,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
 
   // Legs
   {
-    name: "Barbell Squat",
+    name: "Squat (Barbell)",
     type: "strength",
     primary: ["quads", "glutes"],
     secondary: ["hamstrings"],
@@ -397,7 +397,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Leg Press",
+    name: "Leg Press (Machine)",
     type: "strength",
     primary: ["quads", "glutes"],
     secondary: ["hamstrings"],
@@ -430,7 +430,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Deadlift",
+    name: "Deadlift (Barbell)",
     type: "strength",
     primary: ["hamstrings", "glutes", "back"],
     secondary: ["forearms"],
@@ -452,7 +452,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Hip Thrust",
+    name: "Hip Thrust (Barbell)",
     type: "strength",
     primary: ["glutes"],
     secondary: ["hamstrings"],
@@ -474,7 +474,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Leg Extension",
+    name: "Leg Extension (Machine)",
     type: "strength",
     primary: ["quads"],
     secondary: [],
@@ -531,7 +531,7 @@ export const EXERCISE_LIBRARY: ExerciseDef[] = [
     ],
   },
   {
-    name: "Russian Twist",
+    name: "Russian Twist (Bodyweight)",
     type: "strength",
     primary: ["obliques"],
     secondary: ["abs"],

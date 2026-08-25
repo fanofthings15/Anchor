@@ -171,6 +171,49 @@ workoutsRouter.post("/:workoutId/exercises", (req, res) => {
   res.status(201).json(serializeExercise(row));
 });
 
+// PATCH /api/workouts/:workoutId/exercises/reorder — persist a new exercise order
+// within one workout (drag-and-drop).
+workoutsRouter.patch("/:workoutId/exercises/reorder", (req, res) => {
+  const { ordered_ids } = req.body ?? {};
+  if (!Array.isArray(ordered_ids) || ordered_ids.some((id) => typeof id !== "string")) {
+    res.status(400).json({ error: "ordered_ids must be an array of exercise ids" });
+    return;
+  }
+  const update = db.query("UPDATE workout_exercises SET sort_order = ? WHERE id = ? AND user_id = ? AND workout_id = ?");
+  ordered_ids.forEach((id: string, index: number) => update.run(index, id, req.uid, req.params.workoutId));
+  const exercises = db
+    .query<WorkoutExerciseRow, [string, string]>(
+      "SELECT id, user_id, workout_id, name, exercise_type, notes, sort_order FROM workout_exercises WHERE user_id = ? AND workout_id = ? ORDER BY sort_order ASC"
+    )
+    .all(req.uid, req.params.workoutId);
+  res.json(exercises.map(serializeExercise));
+});
+
+// PATCH /api/workouts/exercises/:id — currently just notes (e.g. "felt heavy today,
+// drop weight next time"); name/type changes aren't exposed here since they'd desync
+// from the exercise library the picker is built from.
+workoutsRouter.patch("/exercises/:id", (req, res) => {
+  const existing = db
+    .query<WorkoutExerciseRow, [string, string]>("SELECT * FROM workout_exercises WHERE id = ? AND user_id = ?")
+    .get(req.params.id, req.uid);
+  if (!existing) {
+    res.status(404).json({ error: "not found" });
+    return;
+  }
+  const { notes } = req.body ?? {};
+  if (typeof notes !== "string") {
+    res.status(400).json({ error: "notes must be a string" });
+    return;
+  }
+  db.query("UPDATE workout_exercises SET notes = ? WHERE id = ? AND user_id = ?").run(notes, req.params.id, req.uid);
+  const row = db
+    .query<WorkoutExerciseRow, [string]>(
+      "SELECT id, user_id, workout_id, name, exercise_type, notes, sort_order FROM workout_exercises WHERE id = ?"
+    )
+    .get(req.params.id)!;
+  res.json(serializeExercise(row));
+});
+
 workoutsRouter.delete("/exercises/:id", (req, res) => {
   db.query("DELETE FROM workout_sets WHERE exercise_id = ? AND user_id = ?").run(req.params.id, req.uid);
   db.query("DELETE FROM workout_exercises WHERE id = ? AND user_id = ?").run(req.params.id, req.uid);

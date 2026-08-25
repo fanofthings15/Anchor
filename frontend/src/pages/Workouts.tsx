@@ -12,6 +12,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   api,
   type ExerciseType,
@@ -33,6 +36,18 @@ import ExercisePicker from "../ExercisePicker";
 
 type Tab = "workouts" | "food" | "weight" | "stats";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// A dedicated drag-affordance element with its own dnd-kit listeners — so a drag never
+// fires from a tap on the exercise name (which opens the detail modal) or delete button,
+// and `touch-action: none` (see .drag-handle in styles.css) keeps mobile from trying to
+// scroll the page mid-drag.
+function DragHandle(props: Record<string, unknown>) {
+  return (
+    <button type="button" className="btn-icon drag-handle" aria-label="Drag to reorder" {...props}>
+      ⠿
+    </button>
+  );
+}
 
 function shortDate(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
@@ -314,6 +329,27 @@ function WorkoutsTab() {
     setSets((prev) => prev.filter((s) => s.exercise_id !== id));
   }
 
+  async function updateExerciseNotes(id: string, notes: string) {
+    setExercises((prev) => prev.map((ex) => (ex.id === id ? { ...ex, notes } : ex)));
+    try {
+      await api.updateWorkoutExerciseNotes(id, notes);
+    } catch {
+      load();
+    }
+  }
+
+  async function reorderExercises(workoutId: string, orderedIds: string[]) {
+    setExercises((prev) => {
+      const order = new Map(orderedIds.map((id, i) => [id, i]));
+      return prev.map((ex) => (ex.workout_id === workoutId && order.has(ex.id) ? { ...ex, sort_order: order.get(ex.id)! } : ex));
+    });
+    try {
+      await api.reorderWorkoutExercises(workoutId, orderedIds);
+    } catch {
+      load();
+    }
+  }
+
   async function addSet(
     exerciseId: string,
     data: { weight?: number | null; reps?: number | null; distance_miles?: number | null; duration_seconds?: number | null }
@@ -353,21 +389,24 @@ function WorkoutsTab() {
     const routine = await api.createRoutine(name);
     setRoutines((prev) => [...prev, routine].sort((a, b) => a.name.localeCompare(b.name)));
     const workoutExercises = exercises.filter((ex) => ex.workout_id === workoutId).sort((a, b) => a.sort_order - b.sort_order);
-    const created = await Promise.all(
-      workoutExercises.map((ex) => {
-        const exSets = sets.filter((s) => s.exercise_id === ex.id);
-        const top = exSets.reduce<WorkoutSet | null>(
-          (best, s) => (s.weight != null && (best?.weight ?? -Infinity) < s.weight ? s : best),
-          null
-        );
-        return api.createRoutineExercise(routine.id, {
-          name: ex.name,
-          sets: exSets.length || undefined,
-          reps: top?.reps ?? undefined,
-          weight: top?.weight ?? undefined,
-        });
-      })
-    );
+    // Sequential, not Promise.all — each POST assigns its sort_order server-side from
+    // the current max, so firing them concurrently raced and could hand out duplicate
+    // values, scrambling the routine's exercise order (and everything started from it).
+    const created: WorkoutRoutineExercise[] = [];
+    for (const ex of workoutExercises) {
+      const exSets = sets.filter((s) => s.exercise_id === ex.id);
+      const top = exSets.reduce<WorkoutSet | null>(
+        (best, s) => (s.weight != null && (best?.weight ?? -Infinity) < s.weight ? s : best),
+        null
+      );
+      const routineExercise = await api.createRoutineExercise(routine.id, {
+        name: ex.name,
+        sets: exSets.length || undefined,
+        reps: top?.reps ?? undefined,
+        weight: top?.weight ?? undefined,
+      });
+      created.push(routineExercise);
+    }
     setRoutineExercises((prev) => [...prev, ...created]);
   }
 
@@ -395,6 +434,18 @@ function WorkoutsTab() {
   async function deleteRoutineExercise(id: string) {
     await api.deleteRoutineExercise(id);
     setRoutineExercises((prev) => prev.filter((ex) => ex.id !== id));
+  }
+
+  async function reorderRoutineExercises(routineId: string, orderedIds: string[]) {
+    setRoutineExercises((prev) => {
+      const order = new Map(orderedIds.map((id, i) => [id, i]));
+      return prev.map((ex) => (ex.routine_id === routineId && order.has(ex.id) ? { ...ex, sort_order: order.get(ex.id)! } : ex));
+    });
+    try {
+      await api.reorderRoutineExercises(routineId, orderedIds);
+    } catch {
+      load();
+    }
   }
 
   // Datalist source for the "add exercise" name field — the curated library first, plus
@@ -501,6 +552,7 @@ function WorkoutsTab() {
                   exerciseNames={exerciseNames}
                   onAddExercise={(data) => addRoutineExercise(r.id, data)}
                   onDeleteExercise={deleteRoutineExercise}
+                  onReorderExercises={(orderedIds) => reorderRoutineExercises(r.id, orderedIds)}
                   onDelete={() => deleteRoutine(r.id)}
                 />
               ))}
@@ -529,9 +581,11 @@ function WorkoutsTab() {
               onDelete={() => remove(w.id)}
               onAddExercise={(name, exerciseType) => addExercise(w.id, name, exerciseType)}
               onDeleteExercise={removeExercise}
+              onReorderExercises={(orderedIds) => reorderExercises(w.id, orderedIds)}
               onAddSet={addSet}
               onUpdateSet={updateSet}
               onDeleteSet={deleteSet}
+              onUpdateNotes={updateExerciseNotes}
               onSaveAsRoutine={(name) => saveAsRoutine(w.id, name)}
             />
           ))}
@@ -542,12 +596,33 @@ function WorkoutsTab() {
   );
 }
 
+function SortableRoutineExerciseRow({ ex, onDeleteExercise }: { ex: WorkoutRoutineExercise; onDeleteExercise: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ex.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 };
+
+  return (
+    <div className="row-between" ref={setNodeRef} style={style}>
+      <div className="row" style={{ flexWrap: "wrap" }}>
+        <DragHandle {...attributes} {...listeners} />
+        <strong>{ex.name}</strong>
+        {ex.sets != null && <span className="chip">{ex.sets} sets</span>}
+        {ex.reps != null && <span className="chip">{ex.reps} reps</span>}
+        {ex.weight != null && <span className="chip">{ex.weight} lb</span>}
+      </div>
+      <button type="button" className="btn-icon text-danger" onClick={() => onDeleteExercise(ex.id)} aria-label="Delete exercise">
+        ✕
+      </button>
+    </div>
+  );
+}
+
 function RoutineCard({
   routine,
   exercises,
   exerciseNames,
   onAddExercise,
   onDeleteExercise,
+  onReorderExercises,
   onDelete,
 }: {
   routine: WorkoutRoutine;
@@ -555,6 +630,7 @@ function RoutineCard({
   exerciseNames: string[];
   onAddExercise: (data: { name: string; sets?: number; reps?: number; weight?: number }) => void;
   onDeleteExercise: (id: string) => void;
+  onReorderExercises: (orderedIds: string[]) => void;
   onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -562,6 +638,16 @@ function RoutineCard({
   const [sets, setSets] = useState("");
   const [reps, setReps] = useState("");
   const [weight, setWeight] = useState("");
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = exercises.findIndex((ex) => ex.id === active.id);
+    const newIndex = exercises.findIndex((ex) => ex.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onReorderExercises(arrayMove(exercises, oldIndex, newIndex).map((ex) => ex.id));
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -600,26 +686,15 @@ function RoutineCard({
           {exercises.length === 0 ? (
             <div className="empty-state">No exercises yet.</div>
           ) : (
-            <div className="list">
-              {exercises.map((ex) => (
-                <div className="row-between" key={ex.id}>
-                  <div className="row" style={{ flexWrap: "wrap" }}>
-                    <strong>{ex.name}</strong>
-                    {ex.sets != null && <span className="chip">{ex.sets} sets</span>}
-                    {ex.reps != null && <span className="chip">{ex.reps} reps</span>}
-                    {ex.weight != null && <span className="chip">{ex.weight} lb</span>}
-                  </div>
-                  <button
-                    type="button"
-                    className="btn-icon text-danger"
-                    onClick={() => onDeleteExercise(ex.id)}
-                    aria-label="Delete exercise"
-                  >
-                    ✕
-                  </button>
+            <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={exercises.map((ex) => ex.id)} strategy={verticalListSortingStrategy}>
+                <div className="list">
+                  {exercises.map((ex) => (
+                    <SortableRoutineExerciseRow key={ex.id} ex={ex} onDeleteExercise={onDeleteExercise} />
+                  ))}
                 </div>
-              ))}
-            </div>
+              </SortableContext>
+            </DndContext>
           )}
           <form className="row" style={{ flexWrap: "wrap", marginTop: 10, gap: 8 }} onSubmit={submit}>
             <ExercisePicker value={name} onChange={setName} options={exerciseNames} placeholder="Exercise name" style={{ flex: "1 1 140px" }} />
@@ -765,6 +840,7 @@ function ExerciseBlock({
   onAddSet,
   onUpdateSet,
   onDeleteSet,
+  onUpdateNotes,
 }: {
   exercise: WorkoutExercise;
   sets: WorkoutSet[];
@@ -778,9 +854,12 @@ function ExerciseBlock({
   }) => void;
   onUpdateSet: (id: string, data: SetUpdate) => void;
   onDeleteSet: (id: string) => void;
+  onUpdateNotes: (notes: string) => void;
 }) {
   const isCardio = exercise.exercise_type === "cardio";
   const [showDetail, setShowDetail] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: exercise.id });
+  const dragStyle = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 };
 
   // A new set starts from whatever the last set in this exercise already has — if this
   // is the very first set, it falls back to the same slot from the previous time this
@@ -799,21 +878,34 @@ function ExerciseBlock({
   }
 
   return (
-    <div className="card" style={{ marginBottom: 10 }}>
+    <div className="card" style={{ marginBottom: 10, ...dragStyle }} ref={setNodeRef}>
       <div className="row-between" style={{ marginBottom: sets.length > 0 ? 10 : 0 }}>
-        <button
-          type="button"
-          style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 700, textAlign: "left" }}
-          onClick={() => setShowDetail(true)}
-        >
-          {exercise.name}
-        </button>
+        <div className="row" style={{ flex: 1, minWidth: 0 }}>
+          <DragHandle {...attributes} {...listeners} />
+          <button
+            type="button"
+            style={{ background: "none", border: "none", padding: 0, font: "inherit", fontWeight: 700, textAlign: "left" }}
+            onClick={() => setShowDetail(true)}
+          >
+            {exercise.name}
+          </button>
+        </div>
         <button type="button" className="btn-icon text-danger" onClick={onDelete} aria-label={`Delete ${exercise.name}`}>
           ✕
         </button>
       </div>
 
       {showDetail && <ExerciseDetailModal name={exercise.name} onClose={() => setShowDetail(false)} />}
+
+      <input
+        type="text"
+        placeholder="Notes (optional)"
+        defaultValue={exercise.notes}
+        style={{ width: "100%", marginBottom: sets.length > 0 ? 10 : 0, fontSize: 13 }}
+        onBlur={(e) => {
+          if (e.target.value !== exercise.notes) onUpdateNotes(e.target.value);
+        }}
+      />
 
       {sets.length > 0 && (
         <div className="sets-table">
@@ -857,9 +949,11 @@ function WorkoutCard({
   onDelete,
   onAddExercise,
   onDeleteExercise,
+  onReorderExercises,
   onAddSet,
   onUpdateSet,
   onDeleteSet,
+  onUpdateNotes,
   onSaveAsRoutine,
 }: {
   workout: Workout;
@@ -872,12 +966,14 @@ function WorkoutCard({
   onDelete: () => void;
   onAddExercise: (name: string, exerciseType: ExerciseType) => void;
   onDeleteExercise: (id: string) => void;
+  onReorderExercises: (orderedIds: string[]) => void;
   onAddSet: (
     exerciseId: string,
     data: { weight?: number | null; reps?: number | null; distance_miles?: number | null; duration_seconds?: number | null }
   ) => void;
   onUpdateSet: (id: string, data: SetUpdate) => void;
   onDeleteSet: (id: string) => void;
+  onUpdateNotes: (id: string, notes: string) => void;
   onSaveAsRoutine: (name: string) => void;
 }) {
   const [name, setName] = useState("");
@@ -885,6 +981,16 @@ function WorkoutCard({
   const [typeTouched, setTypeTouched] = useState(false);
   const [savingRoutine, setSavingRoutine] = useState(false);
   const [routineName, setRoutineName] = useState("");
+  const dragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleExerciseDragEnd(e: DragEndEvent) {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = exercises.findIndex((ex) => ex.id === active.id);
+    const newIndex = exercises.findIndex((ex) => ex.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    onReorderExercises(arrayMove(exercises, oldIndex, newIndex).map((ex) => ex.id));
+  }
 
   // Typing a known cardio exercise name auto-switches the type — same names the backend
   // reclassifies existing data for — but a manual override always wins, so re-typing the
@@ -963,18 +1069,23 @@ function WorkoutCard({
           {exercises.length === 0 ? (
             <div className="empty-state">No exercises yet — add one below.</div>
           ) : (
-            exercises.map((ex) => (
-              <ExerciseBlock
-                key={ex.id}
-                exercise={ex}
-                sets={sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index)}
-                previousSets={getPreviousSets(ex.name)}
-                onDelete={() => onDeleteExercise(ex.id)}
-                onAddSet={(data) => onAddSet(ex.id, data)}
-                onUpdateSet={onUpdateSet}
-                onDeleteSet={onDeleteSet}
-              />
-            ))
+            <DndContext sensors={dragSensors} collisionDetection={closestCenter} onDragEnd={handleExerciseDragEnd}>
+              <SortableContext items={exercises.map((ex) => ex.id)} strategy={verticalListSortingStrategy}>
+                {exercises.map((ex) => (
+                  <ExerciseBlock
+                    key={ex.id}
+                    exercise={ex}
+                    sets={sets.filter((s) => s.exercise_id === ex.id).sort((a, b) => a.set_index - b.set_index)}
+                    previousSets={getPreviousSets(ex.name)}
+                    onDelete={() => onDeleteExercise(ex.id)}
+                    onAddSet={(data) => onAddSet(ex.id, data)}
+                    onUpdateSet={onUpdateSet}
+                    onDeleteSet={onDeleteSet}
+                    onUpdateNotes={(notes) => onUpdateNotes(ex.id, notes)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
 
           <form className="quick-add" onSubmit={submit} style={{ flexWrap: "wrap" }}>
