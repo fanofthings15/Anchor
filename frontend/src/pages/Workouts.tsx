@@ -949,15 +949,10 @@ function ExerciseBlock({
 
       {showDetail && <ExerciseDetailModal name={exercise.name} onClose={() => setShowDetail(false)} />}
 
-      {previousNotes && (
-        <div className="text-dim" style={{ fontSize: 12, marginBottom: 4 }}>
-          Last time: {previousNotes}
-        </div>
-      )}
       <input
         type="text"
         placeholder="Notes (optional)"
-        defaultValue={exercise.notes}
+        defaultValue={exercise.notes || previousNotes}
         style={{ width: "100%", marginBottom: sets.length > 0 ? 10 : 0, fontSize: 13 }}
         onBlur={(e) => {
           if (e.target.value !== exercise.notes) onUpdateNotes(e.target.value);
