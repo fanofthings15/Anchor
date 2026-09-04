@@ -142,7 +142,25 @@ a {
   line-height: 1;
 }
 
+/* A label longer than its ~90px mobile column would otherwise wrap to two lines,
+   growing that one tab's height beyond --nav-height and pushing its icon out of line
+   with the other (single-line) tabs — truncate instead so the bar always stays flush. */
+.app-nav-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-nav-link-desktop-only {
+  display: none;
+}
+
+/* Icon-only on the mobile bottom bar for the 4 primary tabs — their icons are
+   recognizable enough on their own, and losing the label frees up room the label
+   wrapping used to steal (see .app-nav-label above). Desktop's sidebar restores it
+   below, since a vertical list of icons alone isn't self-explanatory the same way. */
+.app-nav-link-primary .app-nav-label {
   display: none;
 }
 
@@ -242,6 +260,10 @@ a {
     display: flex;
   }
 
+  .app-nav-link-primary .app-nav-label {
+    display: inline;
+  }
+
   .app-nav-more-trigger {
     display: none;
   }
@@ -298,6 +320,21 @@ h2 {
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* Every icon in the app is one of these lucide-react outline icons rendered inline next
+   to text. No color set here on purpose — stroke="currentColor" (lucide's default) means
+   it inherits whatever `color` is already in effect where it's placed (dim text, a
+   warning chip, danger red, ...), so it always matches its surrounding text rather than
+   carrying its own fixed color the way a multicolor emoji glyph would. Context that puts
+   an icon directly in a default-color area and wants it visually secondary should wrap
+   it with `.text-dim` rather than color the icon alone. */
+.icon-inline {
+  flex-shrink: 0;
+  /* Ignored inside a flex row (where align-items:center already centers it) — only
+     matters for the handful of spots an icon sits inline in ordinary text flow, where
+     the SVG's default baseline alignment sits visibly low against the text next to it. */
+  vertical-align: -2px;
 }
 
 /* Tighter heading rhythm than the site-wide h1/h2 rules — on a phone, five section

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { api, type ShoppingItem, type ShoppingList } from "../api/client";
 
 export default function Shopping() {
@@ -129,7 +130,7 @@ export default function Shopping() {
                   {lists.find((l) => l.id === selectedListId)?.name}
                 </span>
                 <button type="button" className="btn-icon text-danger" onClick={() => removeList(selectedListId)} aria-label="Delete list">
-                  ✕
+                  <X size={18} aria-hidden="true" />
                 </button>
               </div>
 
@@ -164,7 +165,7 @@ export default function Shopping() {
                         {item.quantity && <span className="text-dim">{item.quantity}</span>}
                       </div>
                       <button type="button" className="btn-icon" onClick={() => removeItem(item.id)} aria-label="Delete item">
-                        ✕
+                        <X size={18} aria-hidden="true" />
                       </button>
                     </div>
                   ))}

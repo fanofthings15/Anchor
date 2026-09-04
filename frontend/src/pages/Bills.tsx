@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Pencil, X } from "lucide-react";
 import { api, type Bill, type Recurrence } from "../api/client";
 
 const RECURRENCE_OPTIONS: { value: Recurrence; label: string }[] = [
@@ -378,10 +379,10 @@ export default function Bills() {
                       Mark paid
                     </button>
                     <button type="button" className="btn-icon" onClick={() => startEdit(bill)} aria-label="Edit bill">
-                      ✎
+                      <Pencil size={18} aria-hidden="true" />
                     </button>
                     <button type="button" className="btn-icon text-danger" onClick={() => remove(bill.id)} aria-label="Delete bill">
-                      ✕
+                      <X size={18} aria-hidden="true" />
                     </button>
                   </div>
                 </div>

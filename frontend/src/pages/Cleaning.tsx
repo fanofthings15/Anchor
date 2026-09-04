@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Pencil, X } from "lucide-react";
 import { api, type Recurrence, type RecurringTask } from "../api/client";
 
 type Category = "cleaning" | "maintenance";
@@ -318,10 +319,10 @@ export default function Cleaning() {
                   </div>
                   <div className="row" style={{ gap: 4 }}>
                     <button type="button" className="btn-icon" onClick={() => startEdit(task)} aria-label="Edit task">
-                      ✎
+                      <Pencil size={18} aria-hidden="true" />
                     </button>
                     <button type="button" className="btn-icon text-danger" onClick={() => remove(task.id)} aria-label="Delete task">
-                      ✕
+                      <X size={18} aria-hidden="true" />
                     </button>
                   </div>
                 </div>

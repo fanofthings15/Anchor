@@ -1,22 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  Broom,
+  Calendar,
+  Check,
+  Dumbbell,
+  Ellipsis,
+  Flame,
+  type LucideIcon,
+  PenLine,
+  Receipt,
+  Settings,
+  ShoppingCart,
+  Sun,
+  TrendingUp,
+} from "lucide-react";
 import { getLastNote } from "../api/client";
 
-const PRIMARY = [
-  { to: "/", label: "Today", icon: "☀" },
-  { to: "/notes", label: "Notes", icon: "✎" },
-  { to: "/workouts", label: "Workouts & Food", icon: "💪" },
-  { to: "/habits", label: "Habits", icon: "🔥" },
+const PRIMARY: { to: string; label: string; icon: LucideIcon }[] = [
+  { to: "/", label: "Today", icon: Sun },
+  { to: "/notes", label: "Notes", icon: PenLine },
+  { to: "/workouts", label: "Workouts", icon: Dumbbell },
+  { to: "/habits", label: "Habits", icon: Flame },
 ];
 
-const MORE = [
-  { to: "/todos", label: "Todos", icon: "✓" },
-  { to: "/calendar", label: "Calendar", icon: "▦" },
-  { to: "/cleaning", label: "Cleaning & Maintenance", icon: "🧹" },
-  { to: "/shopping", label: "Shopping", icon: "🛒" },
-  { to: "/bills", label: "Bills", icon: "🧾" },
-  { to: "/investments", label: "Investments", icon: "📈" },
-  { to: "/settings", label: "Settings", icon: "⚙" },
+const MORE: { to: string; label: string; icon: LucideIcon }[] = [
+  { to: "/todos", label: "Todos", icon: Check },
+  { to: "/calendar", label: "Calendar", icon: Calendar },
+  { to: "/cleaning", label: "Cleaning & Maintenance", icon: Broom },
+  { to: "/shopping", label: "Shopping", icon: ShoppingCart },
+  { to: "/bills", label: "Bills", icon: Receipt },
+  { to: "/investments", label: "Investments", icon: TrendingUp },
+  { to: "/settings", label: "Settings", icon: Settings },
 ];
 
 // One responsive component, not two separate implementations: CSS handles whether this
@@ -88,20 +103,16 @@ export default function Nav() {
               key={item.to}
               to={item.to}
               end={item.to === "/"}
-              className="app-nav-link"
+              className="app-nav-link app-nav-link-primary"
               onClick={item.to === "/notes" ? handleNotesClick : undefined}
             >
-              <span className="app-nav-icon" aria-hidden="true">
-                {item.icon}
-              </span>
+              <item.icon className="app-nav-icon" size={20} aria-hidden="true" />
               <span className="app-nav-label">{item.label}</span>
             </NavLink>
           ))}
           {MORE.map((item) => (
             <NavLink key={item.to} to={item.to} className="app-nav-link app-nav-link-desktop-only">
-              <span className="app-nav-icon" aria-hidden="true">
-                {item.icon}
-              </span>
+              <item.icon className="app-nav-icon" size={20} aria-hidden="true" />
               <span className="app-nav-label">{item.label}</span>
             </NavLink>
           ))}
@@ -112,9 +123,7 @@ export default function Nav() {
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((v) => !v)}
         >
-          <span className="app-nav-icon" aria-hidden="true">
-            …
-          </span>
+          <Ellipsis className="app-nav-icon" size={20} aria-hidden="true" />
           <span className="app-nav-label">More</span>
         </button>
       </nav>
@@ -137,7 +146,7 @@ export default function Nav() {
             </div>
             {MORE.map((item) => (
               <NavLink key={item.to} to={item.to} className="more-sheet-link" onClick={closeSheet}>
-                <span aria-hidden="true">{item.icon}</span>
+                <item.icon size={20} aria-hidden="true" />
                 <span>{item.label}</span>
               </NavLink>
             ))}

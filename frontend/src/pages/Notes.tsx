@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { GripVertical, Lock, Star } from "lucide-react";
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -9,7 +10,7 @@ import { api, isNotesUnlockStale, type Note } from "../api/client";
 function DragHandle(props: Record<string, unknown>) {
   return (
     <button type="button" className="btn-icon drag-handle" aria-label="Drag to reorder" {...props}>
-      ⠿
+      <GripVertical size={18} aria-hidden="true" />
     </button>
   );
 }
@@ -47,7 +48,12 @@ function SortableNoteCard({
         <div className="row" style={{ flex: 1, minWidth: 0 }}>
           <DragHandle {...attributes} {...listeners} onClick={(e: React.MouseEvent) => e.stopPropagation()} />
           {note.pinned && <span className="chip chip-accent">Pinned</span>}
-          {note.locked && <span className="chip">🔒 Locked</span>}
+          {note.locked && (
+            <span className="chip row" style={{ gap: 4 }}>
+              <Lock size={12} className="icon-inline" aria-hidden="true" />
+              Locked
+            </span>
+          )}
           <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note.title}</strong>
         </div>
         <button
@@ -59,7 +65,7 @@ function SortableNoteCard({
           }}
           aria-label="Toggle pin"
         >
-          {note.pinned ? "★" : "☆"}
+          <Star size={18} fill={note.pinned ? "currentColor" : "none"} aria-hidden="true" />
         </button>
       </div>
       {previewText && (

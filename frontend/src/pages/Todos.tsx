@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, GripVertical, X } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -61,7 +62,7 @@ function formatDue(dueAt: string): string {
 function DragHandle(props: Record<string, unknown>) {
   return (
     <button type="button" className="btn-icon drag-handle" aria-label="Drag to reorder" {...props}>
-      ⠿
+      <GripVertical size={18} aria-hidden="true" />
     </button>
   );
 }
@@ -106,7 +107,7 @@ function SortableTodoCard({ todo, onToggle, onDelete }: { todo: Todo; onToggle: 
         />
         <TodoCardBody todo={todo} />
         <button type="button" className="btn-icon text-danger" onClick={() => onDelete(todo.id)} aria-label="Delete todo">
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -179,7 +180,7 @@ function ListSection({
             aria-label={collapsed ? `Expand ${list.name}` : `Collapse ${list.name}`}
             aria-expanded={!collapsed}
           >
-            {collapsed ? "▸" : "▾"}
+            {collapsed ? <ChevronRight size={18} aria-hidden="true" /> : <ChevronDown size={18} aria-hidden="true" />}
           </button>
           <h2 style={{ margin: 0 }}>{list.name}</h2>
           {collapsed && totalCount > 0 && <span className="chip">{totalCount}</span>}
@@ -194,7 +195,7 @@ function ListSection({
             onClick={() => onDeleteList(list.id)}
             aria-label={`Delete list ${list.name}`}
           >
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -254,7 +255,7 @@ function ListSection({
                           onClick={() => onDeleteTodo(todo.id)}
                           aria-label="Delete todo"
                         >
-                          ✕
+                          <X size={18} aria-hidden="true" />
                         </button>
                       </div>
                     </div>
@@ -514,7 +515,9 @@ export default function Todos() {
                           return dragged ? (
                             <div className="card" style={{ opacity: 0.95 }}>
                               <div className="row-between">
-                                <span className="drag-handle btn-icon">⠿</span>
+                                <span className="drag-handle btn-icon">
+                                  <GripVertical size={18} aria-hidden="true" />
+                                </span>
                                 <TodoCardBody todo={dragged} />
                               </div>
                             </div>

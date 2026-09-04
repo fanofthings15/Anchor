@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -257,7 +258,7 @@ export default function Investments() {
                     {account.account_type && <span className="chip">{account.account_type}</span>}
                   </div>
                   <button type="button" className="btn-icon text-danger" onClick={() => removeAccount(account.id)} aria-label={`Delete ${account.name}`}>
-                    ✕
+                    <X size={18} aria-hidden="true" />
                   </button>
                 </div>
                 {account.notes && <p className="text-dim" style={{ marginTop: 6 }}>{account.notes}</p>}
@@ -303,7 +304,7 @@ export default function Investments() {
                           {entry.notes && <div className="text-dim">{entry.notes}</div>}
                         </div>
                         <button type="button" className="btn-icon text-danger" onClick={() => removeEntry(entry.id)} aria-label="Delete entry">
-                          ✕
+                          <X size={18} aria-hidden="true" />
                         </button>
                       </div>
                     ))}
@@ -357,7 +358,7 @@ export default function Investments() {
                   {goal.notes && <div className="text-dim">{goal.notes}</div>}
                 </div>
                 <button type="button" className="btn-icon text-danger" onClick={() => removeGoal(goal.id)} aria-label={`Delete ${goal.name}`}>
-                  ✕
+                  <X size={18} aria-hidden="true" />
                 </button>
               </div>
             </div>

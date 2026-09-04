@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
+import { Broom, ChevronLeft, ChevronRight, Wrench, X } from "lucide-react";
 import { api, type CalendarEvent, type RecurringTask } from "../api/client";
 import { buildMonthGrid, sameDay } from "../calendarUtils";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MAX_EVENTS_PER_CELL = 3;
 
-function taskIcon(category: RecurringTask["category"]): string {
-  return category === "cleaning" ? "🧹" : "🔧";
+function TaskIcon({ category }: { category: RecurringTask["category"] }) {
+  return category === "cleaning" ? (
+    <Broom size={12} className="icon-inline" aria-hidden="true" />
+  ) : (
+    <Wrench size={12} className="icon-inline" aria-hidden="true" />
+  );
 }
 
 function dateInputValue(d: Date): string {
@@ -206,11 +211,11 @@ export default function Calendar() {
 
       <div className="calendar-nav">
         <button type="button" className="btn" onClick={() => goToMonth(-1)} aria-label="Previous month">
-          ‹
+          <ChevronLeft size={18} aria-hidden="true" />
         </button>
         <span className="calendar-title">{viewDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</span>
         <button type="button" className="btn" onClick={() => goToMonth(1)} aria-label="Next month">
-          ›
+          <ChevronRight size={18} aria-hidden="true" />
         </button>
       </div>
 
@@ -258,7 +263,7 @@ export default function Calendar() {
                   ))}
                   {shownTasks.map((t) => (
                     <div className="calendar-event calendar-task" key={t.id} title={t.name}>
-                      {taskIcon(t.category)} {t.name}
+                      <TaskIcon category={t.category} /> {t.name}
                     </div>
                   ))}
                   {extra > 0 && <div className="calendar-more">+{extra} more</div>}
@@ -276,7 +281,7 @@ export default function Calendar() {
               {selectedDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
             </strong>
             <button type="button" className="btn-icon" onClick={() => setSelectedDate(null)} aria-label="Close day">
-              ✕
+              <X size={18} aria-hidden="true" />
             </button>
           </div>
 
@@ -313,7 +318,7 @@ export default function Calendar() {
                         onClick={() => removeEvent(ev.id)}
                         aria-label="Delete event"
                       >
-                        ✕
+                        <X size={18} aria-hidden="true" />
                       </button>
                     )}
                   </div>
@@ -324,7 +329,7 @@ export default function Calendar() {
                   <div className="row-between">
                     <div>
                       <span className="chip chip-warning">
-                        {taskIcon(t.category)} {t.category === "cleaning" ? "Cleaning" : "Maintenance"}
+                        <TaskIcon category={t.category} /> {t.category === "cleaning" ? "Cleaning" : "Maintenance"}
                       </span>
                       <div style={{ marginTop: 6 }}>
                         <strong>{t.name}</strong>

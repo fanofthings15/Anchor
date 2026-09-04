@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { ArrowDown, ArrowUp, GripVertical, Pencil, X } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -44,7 +45,7 @@ const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 function DragHandle(props: Record<string, unknown>) {
   return (
     <button type="button" className="btn-icon drag-handle" aria-label="Drag to reorder" {...props}>
-      ⠿
+      <GripVertical size={18} aria-hidden="true" />
     </button>
   );
 }
@@ -655,7 +656,7 @@ function SortableRoutineExerciseRow({ ex, onDeleteExercise }: { ex: WorkoutRouti
         {ex.weight != null && <span className="chip">{ex.weight} lb</span>}
       </div>
       <button type="button" className="btn-icon text-danger" onClick={() => onDeleteExercise(ex.id)} aria-label="Delete exercise">
-        ✕
+        <X size={18} aria-hidden="true" />
       </button>
     </div>
   );
@@ -723,7 +724,7 @@ function RoutineCard({
           <span className="chip">{exercises.length} exercises</span>
         </button>
         <button type="button" className="btn-icon text-danger" onClick={onDelete} aria-label={`Delete routine ${routine.name}`}>
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
       {expanded && (
@@ -871,7 +872,7 @@ function SetRow({
         aria-label={`Mark set ${index + 1} ${set.completed ? "not done" : "done"}`}
       />
       <button type="button" className="set-row-delete" onClick={onDelete} aria-label={`Delete set ${index + 1}`}>
-        ✕
+        <X size={18} aria-hidden="true" />
       </button>
     </div>
   );
@@ -938,7 +939,7 @@ function ExerciseBlock({
           </button>
         </div>
         <button type="button" className="btn-icon text-danger" onClick={onDelete} aria-label={`Delete ${exercise.name}`}>
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
 
@@ -1092,7 +1093,7 @@ function WorkoutCard({
           <span className="chip">{workout.workout_date}</span>
         </button>
         <button type="button" className="btn-icon text-danger" onClick={onDelete} aria-label="Delete workout">
-          ✕
+          <X size={18} aria-hidden="true" />
         </button>
       </div>
 
@@ -1536,10 +1537,10 @@ function FoodTab() {
                       onClick={() => startEdit(m)}
                       aria-label={`Edit ${m.name}`}
                     >
-                      ✎
+                      <Pencil size={18} aria-hidden="true" />
                     </button>
                     <button type="button" className="btn-icon text-danger" onClick={() => remove(m.id)} aria-label="Delete meal">
-                      ✕
+                      <X size={18} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -1871,8 +1872,15 @@ function WeightTab() {
         <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
           {latest && <span className="chip chip-accent">Latest: {latest.weight_lbs} lb</span>}
           {delta != null && (
-            <span className={`chip ${delta > 0 ? "chip-warning" : delta < 0 ? "" : ""}`}>
-              {delta > 0 ? "▲" : delta < 0 ? "▼" : "–"} {Math.abs(delta)} lb since last entry
+            <span className={`chip row ${delta > 0 ? "chip-warning" : delta < 0 ? "" : ""}`} style={{ gap: 4 }}>
+              {delta > 0 ? (
+                <ArrowUp size={12} className="icon-inline" aria-hidden="true" />
+              ) : delta < 0 ? (
+                <ArrowDown size={12} className="icon-inline" aria-hidden="true" />
+              ) : (
+                "–"
+              )}
+              {Math.abs(delta)} lb since last entry
             </span>
           )}
           {goalWeight != null && (
@@ -1935,7 +1943,7 @@ function WeightTab() {
                     {e.notes && <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>{e.notes}</div>}
                   </div>
                   <button type="button" className="btn-icon text-danger" onClick={() => remove(e.id)} aria-label="Delete entry">
-                    ✕
+                    <X size={18} aria-hidden="true" />
                   </button>
                 </div>
               </div>

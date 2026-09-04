@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Lock, Star, Unlock, X } from "lucide-react";
 import { api, clearLastNote, isNotesUnlockStale, NOTES_UNLOCK_KEY, recordLastNote, type Note, type NoteImage } from "../api/client";
 
 function formatUpdated(iso: string): string {
@@ -328,7 +329,7 @@ export default function NoteEditor() {
       <div>
         <div className="row-between" style={{ marginBottom: 16 }}>
           <button type="button" className="btn-icon" onClick={() => navigate("/notes")} aria-label="Back to notes">
-            ←
+            <ArrowLeft size={18} aria-hidden="true" />
           </button>
         </div>
         <div className="empty-state">Loading…</div>
@@ -341,11 +342,11 @@ export default function NoteEditor() {
       <div>
         <div className="row-between" style={{ marginBottom: 16 }}>
           <button type="button" className="btn-icon" onClick={() => navigate("/notes")} aria-label="Back to notes">
-            ←
+            <ArrowLeft size={18} aria-hidden="true" />
           </button>
         </div>
         <form className="pin-gate" onSubmit={handleUnlock}>
-          <div style={{ fontSize: 32 }}>🔒</div>
+          <Lock size={32} aria-hidden="true" />
           <strong style={{ marginTop: 8 }}>{note.title}</strong>
           <div className="text-dim" style={{ fontSize: 13, marginTop: 4 }}>
             This note is locked — enter your PIN to view it.
@@ -377,7 +378,7 @@ export default function NoteEditor() {
     <div className="note-editor">
       <div className="row-between" style={{ marginBottom: 12 }}>
         <button type="button" className="btn-icon" onClick={() => navigate("/notes")} aria-label="Back to notes">
-          ←
+          <ArrowLeft size={18} aria-hidden="true" />
         </button>
         <div className="row" style={{ gap: 4 }}>
           <button
@@ -388,7 +389,7 @@ export default function NoteEditor() {
             aria-label={note.locked ? "Unlock note" : "Lock note"}
             title={!hasNotesPin && !note.locked ? "Set a PIN in Settings to lock notes" : undefined}
           >
-            {note.locked ? "🔒" : "🔓"}
+            {note.locked ? <Lock size={18} aria-hidden="true" /> : <Unlock size={18} aria-hidden="true" />}
           </button>
           <button
             type="button"
@@ -396,7 +397,7 @@ export default function NoteEditor() {
             onClick={togglePin}
             aria-label={note.pinned ? "Unpin note" : "Pin note"}
           >
-            {note.pinned ? "★" : "☆"}
+            <Star size={18} fill={note.pinned ? "currentColor" : "none"} aria-hidden="true" />
           </button>
           <div style={{ position: "relative" }}>
             <button
@@ -405,7 +406,7 @@ export default function NoteEditor() {
               onClick={() => setConfirmingDelete((v) => !v)}
               aria-label="Delete note"
             >
-              ✕
+              <X size={18} aria-hidden="true" />
             </button>
             {confirmingDelete && (
               <>

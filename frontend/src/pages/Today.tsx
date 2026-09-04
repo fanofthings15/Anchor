@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Banknote, Broom, Dumbbell, Flame, Utensils } from "lucide-react";
 import {
   api,
   type Bill,
@@ -197,8 +198,9 @@ export default function Today() {
                 ))}
                 {overdueBills.map((bill) => (
                   <div className="card card-compact row-between" key={`bill-${bill.id}`}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                      <span className="ellipsis">💵 {bill.name}</span>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{bill.name}</span>
                       <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
@@ -211,7 +213,10 @@ export default function Today() {
                 ))}
                 {overdueTasks.map((task) => (
                   <div className="card card-compact row-between" key={`task-${task.id}`}>
-                    <span className="ellipsis">🧹 {task.name}</span>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{task.name}</span>
+                    </div>
                     <div className="row" style={{ gap: 6 }}>
                       <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
                       <button type="button" className="btn btn-sm" onClick={() => completeTask(task.id)}>
@@ -230,7 +235,10 @@ export default function Today() {
               <div className="list list-compact">
                 {!loggedFoodToday && (
                   <div className="card card-compact row-between">
-                    <span>🍽 Food not logged</span>
+                    <div className="row" style={{ gap: 6 }}>
+                      <Utensils size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span>Food not logged</span>
+                    </div>
                     <Link to="/workouts?tab=food" className="btn btn-primary btn-sm">
                       Log
                     </Link>
@@ -238,7 +246,10 @@ export default function Today() {
                 )}
                 {!loggedWorkoutToday && (
                   <div className="card card-compact row-between">
-                    <span>🏋 Workout not logged</span>
+                    <div className="row" style={{ gap: 6 }}>
+                      <Dumbbell size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span>Workout not logged</span>
+                    </div>
                     <Link to="/workouts?tab=workouts" className="btn btn-sm">
                       Log
                     </Link>
@@ -248,9 +259,12 @@ export default function Today() {
                   const count = habitCounts.get(habitLogKey(habit.id, today)) ?? 0;
                   return (
                     <div className="card card-compact row-between" key={habit.id}>
-                      <span className="ellipsis">
-                        🔥 {habit.name} {habit.target_per_day > 1 && `(${count}/${habit.target_per_day})`}
-                      </span>
+                      <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                        <Flame size={16} className="icon-inline text-dim" aria-hidden="true" />
+                        <span className="ellipsis">
+                          {habit.name} {habit.target_per_day > 1 && `(${count}/${habit.target_per_day})`}
+                        </span>
+                      </div>
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => logHabitToday(habit)}>
                         Log
                       </button>
@@ -344,8 +358,9 @@ export default function Today() {
               <div className="list list-compact">
                 {dueSoonBills.map((bill) => (
                   <div className="card card-compact row-between" key={bill.id}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                      <span className="ellipsis">💵 {bill.name}</span>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{bill.name}</span>
                       <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
@@ -358,7 +373,10 @@ export default function Today() {
                 ))}
                 {dueSoonTasks.map((task) => (
                   <div className="card card-compact row-between" key={task.id}>
-                    <span className="ellipsis">🧹 {task.name}</span>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{task.name}</span>
+                    </div>
                     <div className="row" style={{ gap: 6 }}>
                       <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
                       <button type="button" className="btn btn-sm" onClick={() => completeTask(task.id)}>

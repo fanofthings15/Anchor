@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Check, Flame, X } from "lucide-react";
 import { api, type Habit, type HabitLog } from "../api/client";
 import { addDaysISO, computeStreaks, todayISO } from "../calendarUtils";
 
@@ -128,7 +129,12 @@ export default function Habits() {
                 <div className="row-between">
                   <div className="row" style={{ gap: 8 }}>
                     <strong>{habit.name}</strong>
-                    {current > 0 && <span className="habit-streak">🔥 {current}</span>}
+                    {current > 0 && (
+                      <span className="habit-streak row" style={{ gap: 3 }}>
+                        <Flame size={14} className="icon-inline" aria-hidden="true" />
+                        {current}
+                      </span>
+                    )}
                   </div>
                   <div style={{ position: "relative" }}>
                     <button
@@ -137,7 +143,7 @@ export default function Habits() {
                       onClick={() => setConfirmingDeleteId((v) => (v === habit.id ? null : habit.id))}
                       aria-label="Delete habit"
                     >
-                      ✕
+                      <X size={18} aria-hidden="true" />
                     </button>
                     {confirmingDeleteId === habit.id && (
                       <>
@@ -169,8 +175,14 @@ export default function Habits() {
                     return <div key={date} className={cellClass} />;
                   })}
                 </div>
-                <button type="button" className="btn btn-primary habit-log-btn" onClick={() => logToday(habit)}>
-                  {isDoneToday ? "Done ✓" : `Log (${todayCount}/${habit.target_per_day})`}
+                <button type="button" className="btn btn-primary habit-log-btn row" style={{ justifyContent: "center", gap: 6 }} onClick={() => logToday(habit)}>
+                  {isDoneToday ? (
+                    <>
+                      <Check size={16} aria-hidden="true" /> Done
+                    </>
+                  ) : (
+                    `Log (${todayCount}/${habit.target_per_day})`
+                  )}
                 </button>
               </div>
             );

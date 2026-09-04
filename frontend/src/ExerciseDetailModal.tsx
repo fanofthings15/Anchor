@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { X } from "lucide-react";
 import { findExercise, MUSCLE_GROUP_LABELS } from "./exerciseLibrary";
 
 export default function ExerciseDetailModal({ name, onClose }: { name: string; onClose: () => void }) {
@@ -18,7 +19,7 @@ export default function ExerciseDetailModal({ name, onClose }: { name: string; o
         <div className="row-between" style={{ marginBottom: 12 }}>
           <strong style={{ fontSize: 17 }}>{name}</strong>
           <button type="button" className="btn-icon" onClick={onClose} aria-label="Close">
-            ✕
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
