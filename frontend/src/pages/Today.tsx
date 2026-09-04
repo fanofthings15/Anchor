@@ -4,6 +4,8 @@ import {
   api,
   type Bill,
   type CalendarEvent,
+  type Habit,
+  type HabitLog,
   type RecurringTask,
   type ShoppingList,
   type Todo,
@@ -15,8 +17,8 @@ import { todayISO } from "../calendarUtils";
 // UTC-based — matches how todos/bills/recurring-task dates are stored (full ISO
 // timestamps via toISOString()) and how the backend's /api/today aggregation decides
 // what counts as due, so this has to stay on the same UTC basis as those, not the local
-// calendar-date basis workout_date/meal_date use (see todayISO() in calendarUtils.ts,
-// used further below only for the separate food/workout logged-today check).
+// calendar-date basis workout_date/meal_date/habit_logs.log_date use (see todayISO() in
+// calendarUtils.ts, used further below for the food/workout/habit logged-today checks).
 function todayDateStr(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -41,7 +43,11 @@ function pluralize(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-const UNDATED_TODO_LIMIT = 5;
+function habitLogKey(habitId: string, date: string): string {
+  return `${habitId}|${date}`;
+}
+
+const UNDATED_TODO_LIMIT = 3;
 
 export default function Today() {
   const [todosDue, setTodosDue] = useState<Todo[]>([]);
@@ -52,12 +58,16 @@ export default function Today() {
   const [weekRecap, setWeekRecap] = useState<WeekRecap | null>(null);
   const [loggedFoodToday, setLoggedFoodToday] = useState(true);
   const [loggedWorkoutToday, setLoggedWorkoutToday] = useState(true);
+  const [habits, setHabits] = useState<Habit[]>([]);
+  const [habitCounts, setHabitCounts] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
 
   const [todoLists, setTodoLists] = useState<TodoList[]>([]);
   const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
   const [quickTodoTitle, setQuickTodoTitle] = useState("");
   const [quickShoppingItem, setQuickShoppingItem] = useState("");
+
+  const today = todayISO();
 
   useEffect(() => {
     load();
@@ -66,12 +76,13 @@ export default function Today() {
   async function load() {
     setLoading(true);
     try {
-      const [data, allTodos, mealDates, workoutData, shopping] = await Promise.all([
+      const [data, allTodos, mealDates, workoutData, shopping, habitData] = await Promise.all([
         api.getToday(),
         api.getTodos(),
         api.listMealDates(),
         api.getWorkouts(),
         api.getShopping(),
+        api.getHabits(),
       ]);
       setTodosDue(data.todosDue);
       setUndatedTodos(allTodos.todos.filter((t) => !t.completed && !t.due_at));
@@ -81,9 +92,10 @@ export default function Today() {
       setTasksDue(data.tasksDue);
       setEventsToday(data.eventsToday);
       setWeekRecap(data.weekRecap);
-      const today = todayISO();
       setLoggedFoodToday(mealDates.includes(today));
       setLoggedWorkoutToday(workoutData.workouts.some((w) => w.workout_date === today));
+      setHabits(habitData.habits);
+      setHabitCounts(new Map(habitData.logs.map((l: HabitLog) => [habitLogKey(l.habit_id, l.log_date), l.count])));
     } finally {
       setLoading(false);
     }
@@ -134,53 +146,231 @@ export default function Today() {
     }
   }
 
+  async function logHabitToday(habit: Habit) {
+    const { count } = await api.logHabit(habit.id, today);
+    setHabitCounts((prev) => new Map(prev).set(habitLogKey(habit.id, today), count));
+  }
+
+  const overdueTodos = todosDue.filter((t) => t.due_at && isOverdue(t.due_at));
+  const dueTodayTodos = todosDue.filter((t) => !t.due_at || !isOverdue(t.due_at));
+  const overdueBills = billsDue.filter((b) => isOverdue(b.next_due_at));
+  const dueSoonBills = billsDue.filter((b) => !isOverdue(b.next_due_at));
+  const overdueTasks = tasksDue.filter((t) => isOverdue(t.next_due_at));
+  const dueSoonTasks = tasksDue.filter((t) => !isOverdue(t.next_due_at));
+  const hasOverdue = overdueTodos.length > 0 || overdueBills.length > 0 || overdueTasks.length > 0;
+
+  const incompleteHabits = habits.filter((h) => (habitCounts.get(habitLogKey(h.id, today)) ?? 0) < h.target_per_day);
+  const hasMissedTracking = !loggedFoodToday || !loggedWorkoutToday || incompleteHabits.length > 0;
+
   const nothingDue =
     !loading &&
-    todosDue.length === 0 &&
+    !hasOverdue &&
+    dueTodayTodos.length === 0 &&
     undatedTodos.length === 0 &&
-    billsDue.length === 0 &&
-    tasksDue.length === 0 &&
+    dueSoonBills.length === 0 &&
+    dueSoonTasks.length === 0 &&
     eventsToday.length === 0 &&
-    loggedFoodToday &&
-    loggedWorkoutToday;
+    !hasMissedTracking;
 
   return (
-    <div>
+    <div className="today-page">
       <h1>Today</h1>
 
-      {!loading && (todoLists.length > 0 || shoppingLists.length > 0) && (
-        <section>
-          <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-            {todoLists.length > 0 && (
-              <form className="row" style={{ flex: "1 1 200px", gap: 8 }} onSubmit={quickAddTodo}>
-                <input
-                  type="text"
-                  placeholder="+ Add a to-do…"
-                  value={quickTodoTitle}
-                  onChange={(e) => setQuickTodoTitle(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <button className="btn btn-primary" type="submit">
-                  Add
-                </button>
-              </form>
-            )}
-            {shoppingLists.length > 0 && (
-              <form className="row" style={{ flex: "1 1 200px", gap: 8 }} onSubmit={quickAddShoppingItem}>
-                <input
-                  type="text"
-                  placeholder="+ Add to shopping list…"
-                  value={quickShoppingItem}
-                  onChange={(e) => setQuickShoppingItem(e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                <button className="btn btn-primary" type="submit">
-                  Add
-                </button>
-              </form>
-            )}
-          </div>
-        </section>
+      {loading ? (
+        <div className="empty-state">Loading…</div>
+      ) : nothingDue ? (
+        <div className="empty-state">Nothing due — you're all caught up.</div>
+      ) : (
+        <>
+          {hasOverdue && (
+            <section>
+              <h2>Overdue</h2>
+              <div className="list list-compact">
+                {overdueTodos.map((todo) => (
+                  <div className="card card-compact row-between" key={`todo-${todo.id}`}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
+                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
+                      <span className="ellipsis">{todo.title}</span>
+                    </div>
+                    <span className="chip chip-danger">{formatDate(todo.due_at!)}</span>
+                  </div>
+                ))}
+                {overdueBills.map((bill) => (
+                  <div className="card card-compact row-between" key={`bill-${bill.id}`}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                      <span className="ellipsis">💵 {bill.name}</span>
+                      <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-danger">{formatDate(bill.next_due_at)}</span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {overdueTasks.map((task) => (
+                  <div className="card card-compact row-between" key={`task-${task.id}`}>
+                    <span className="ellipsis">🧹 {task.name}</span>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
+                      <button type="button" className="btn btn-sm" onClick={() => completeTask(task.id)}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {hasMissedTracking && (
+            <section>
+              <h2>Missed Today</h2>
+              <div className="list list-compact">
+                {!loggedFoodToday && (
+                  <div className="card card-compact row-between">
+                    <span>🍽 Food not logged</span>
+                    <Link to="/workouts?tab=food" className="btn btn-primary btn-sm">
+                      Log
+                    </Link>
+                  </div>
+                )}
+                {!loggedWorkoutToday && (
+                  <div className="card card-compact row-between">
+                    <span>🏋 Workout not logged</span>
+                    <Link to="/workouts?tab=workouts" className="btn btn-sm">
+                      Log
+                    </Link>
+                  </div>
+                )}
+                {incompleteHabits.map((habit) => {
+                  const count = habitCounts.get(habitLogKey(habit.id, today)) ?? 0;
+                  return (
+                    <div className="card card-compact row-between" key={habit.id}>
+                      <span className="ellipsis">
+                        🔥 {habit.name} {habit.target_per_day > 1 && `(${count}/${habit.target_per_day})`}
+                      </span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => logHabitToday(habit)}>
+                        Log
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {eventsToday.length > 0 && (
+            <section>
+              <h2>Calendar</h2>
+              <div className="list list-compact">
+                {eventsToday.map((event) => (
+                  <div className="card card-compact row-between" key={event.id}>
+                    <span className="ellipsis">
+                      {event.title}
+                      {event.location && <span className="text-dim"> · {event.location}</span>}
+                    </span>
+                    <span className="chip">{event.all_day ? "All day" : formatTime(event.start_at)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {(dueTodayTodos.length > 0 || undatedTodos.length > 0 || todoLists.length > 0 || shoppingLists.length > 0) && (
+            <section>
+              <h2>To-Dos</h2>
+              <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                {todoLists.length > 0 && (
+                  <form className="row" style={{ flex: "1 1 160px", gap: 8 }} onSubmit={quickAddTodo}>
+                    <input
+                      type="text"
+                      placeholder="+ Add a to-do…"
+                      value={quickTodoTitle}
+                      onChange={(e) => setQuickTodoTitle(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn btn-primary" type="submit">
+                      Add
+                    </button>
+                  </form>
+                )}
+                {shoppingLists.length > 0 && (
+                  <form className="row" style={{ flex: "1 1 160px", gap: 8 }} onSubmit={quickAddShoppingItem}>
+                    <input
+                      type="text"
+                      placeholder="+ Add to shopping list…"
+                      value={quickShoppingItem}
+                      onChange={(e) => setQuickShoppingItem(e.target.value)}
+                      style={{ flex: 1 }}
+                    />
+                    <button className="btn btn-primary" type="submit">
+                      Add
+                    </button>
+                  </form>
+                )}
+              </div>
+              <div className="list list-compact">
+                {dueTodayTodos.map((todo) => (
+                  <div className="card card-compact row-between" key={todo.id}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
+                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
+                      <span className="ellipsis">{todo.title}</span>
+                    </div>
+                    {todo.due_at && <span className="chip chip-warning">Today</span>}
+                  </div>
+                ))}
+                {undatedTodos.slice(0, UNDATED_TODO_LIMIT).map((todo) => (
+                  <div className="card card-compact row-between" key={todo.id}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
+                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
+                      <span className="ellipsis">{todo.title}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {undatedTodos.length > UNDATED_TODO_LIMIT && (
+                <Link to="/todos" className="text-dim" style={{ display: "inline-block", marginTop: 6, fontSize: 13 }}>
+                  +{undatedTodos.length - UNDATED_TODO_LIMIT} more on your todo list
+                </Link>
+              )}
+            </section>
+          )}
+
+          {(dueSoonBills.length > 0 || dueSoonTasks.length > 0) && (
+            <section>
+              <h2>Due Soon</h2>
+              <div className="list list-compact">
+                {dueSoonBills.map((bill) => (
+                  <div className="card card-compact row-between" key={bill.id}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                      <span className="ellipsis">💵 {bill.name}</span>
+                      <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-warning">{formatDate(bill.next_due_at)}</span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {dueSoonTasks.map((task) => (
+                  <div className="card card-compact row-between" key={task.id}>
+                    <span className="ellipsis">🧹 {task.name}</span>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
+                      <button type="button" className="btn btn-sm" onClick={() => completeTask(task.id)}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       {!loading && weekRecap && (
@@ -235,156 +425,6 @@ export default function Today() {
             </div>
           )}
         </section>
-      )}
-
-      {loading ? (
-        <div className="empty-state">Loading…</div>
-      ) : nothingDue ? (
-        <div className="empty-state">Nothing due — you're all caught up.</div>
-      ) : (
-        <>
-          {(!loggedFoodToday || !loggedWorkoutToday) && (
-            <section>
-              <h2>Log Today</h2>
-              <div className="list">
-                {!loggedFoodToday && (
-                  <div className="card row-between">
-                    <span>🍽 No food logged today</span>
-                    <Link to="/workouts?tab=food" className="btn btn-primary">
-                      Log food
-                    </Link>
-                  </div>
-                )}
-                {!loggedWorkoutToday && (
-                  <div className="card row-between">
-                    <span>No workout logged today</span>
-                    <Link to="/workouts?tab=workouts" className="btn">
-                      Log workout
-                    </Link>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {todosDue.length > 0 && (
-            <section>
-              <h2>Due Today</h2>
-              <div className="list">
-                {todosDue.map((todo) => (
-                  <div className="card" key={todo.id}>
-                    <div className="row-between">
-                      <div className="row" style={{ flex: 1 }}>
-                        <button
-                          type="button"
-                          className="checkbox-btn"
-                          onClick={() => completeTodo(todo.id)}
-                          aria-label="Mark complete"
-                        />
-                        <span>{todo.title}</span>
-                      </div>
-                      {todo.due_at && (
-                        <span className={`chip ${isOverdue(todo.due_at) ? "chip-danger" : "chip-warning"}`}>
-                          {isOverdue(todo.due_at) ? "Overdue" : "Today"} · {formatDate(todo.due_at)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {undatedTodos.length > 0 && (
-            <section>
-              <h2>On Your List</h2>
-              <div className="list">
-                {undatedTodos.slice(0, UNDATED_TODO_LIMIT).map((todo) => (
-                  <div className="card" key={todo.id}>
-                    <div className="row" style={{ flex: 1 }}>
-                      <button
-                        type="button"
-                        className="checkbox-btn"
-                        onClick={() => completeTodo(todo.id)}
-                        aria-label="Mark complete"
-                      />
-                      <span>{todo.title}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {undatedTodos.length > UNDATED_TODO_LIMIT && (
-                <Link to="/todos" className="text-dim" style={{ display: "inline-block", marginTop: 8 }}>
-                  +{undatedTodos.length - UNDATED_TODO_LIMIT} more on your todo list
-                </Link>
-              )}
-            </section>
-          )}
-
-          {billsDue.length > 0 && (
-            <section>
-              <h2>Bills Due Soon</h2>
-              <div className="list">
-                {billsDue.map((bill) => (
-                  <div className="card" key={bill.id}>
-                    <div className="row-between">
-                      <strong>{bill.name}</strong>
-                      <span>{formatCents(bill.amount_cents)}</span>
-                    </div>
-                    <div className="row-between" style={{ marginTop: 10 }}>
-                      <span className={`chip ${isOverdue(bill.next_due_at) ? "chip-danger" : "chip-warning"}`}>
-                        {isOverdue(bill.next_due_at) ? "Overdue" : "Due"} {formatDate(bill.next_due_at)}
-                      </span>
-                      <button type="button" className="btn btn-primary" onClick={() => markBillPaid(bill.id)}>
-                        Mark paid
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {tasksDue.length > 0 && (
-            <section>
-              <h2>Cleaning & Maintenance Due</h2>
-              <div className="list">
-                {tasksDue.map((task) => (
-                  <div className="card" key={task.id}>
-                    <div className="row-between">
-                      <div>
-                        <div>{task.name}</div>
-                        <span className={`chip ${isOverdue(task.next_due_at) ? "chip-danger" : "chip-warning"}`}>
-                          {isOverdue(task.next_due_at) ? "Overdue" : "Today"} · {formatDate(task.next_due_at)}
-                        </span>
-                      </div>
-                      <button type="button" className="btn" onClick={() => completeTask(task.id)}>
-                        Mark done
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {eventsToday.length > 0 && (
-            <section>
-              <h2>Today's Events</h2>
-              <div className="list">
-                {eventsToday.map((event) => (
-                  <div className="card" key={event.id}>
-                    <div className="row-between">
-                      <strong>{event.title}</strong>
-                      <span className="chip">{event.all_day ? "All day" : formatTime(event.start_at)}</span>
-                    </div>
-                    {event.location && <div className="text-dim" style={{ marginTop: 6 }}>{event.location}</div>}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-        </>
       )}
     </div>
   );

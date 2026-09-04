@@ -276,6 +276,45 @@ h2 {
   gap: 8px;
 }
 
+/* Denser variants of .list/.card/.btn, used on the Today page to fit as many
+   sections above the fold as possible on a phone (see .today-page below). */
+.list-compact {
+  gap: 6px;
+}
+
+.card-compact {
+  padding: 8px 12px;
+  margin-bottom: 0;
+}
+
+.btn-sm {
+  min-height: 32px;
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Tighter heading rhythm than the site-wide h1/h2 rules — on a phone, five section
+   headings at the default 24px/10px margins alone eat ~180px before any content, more
+   than half the space above the first scroll. */
+.today-page h1 {
+  margin-bottom: 10px;
+}
+
+.today-page h2 {
+  margin: 14px 0 6px;
+}
+
+.today-page section:first-of-type h2 {
+  margin-top: 0;
+}
+
 .empty-state {
   color: var(--text-faint);
   padding: 24px 8px;

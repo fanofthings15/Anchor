@@ -4,18 +4,18 @@ import { getLastNote } from "../api/client";
 
 const PRIMARY = [
   { to: "/", label: "Today", icon: "☀" },
-  { to: "/todos", label: "Todos", icon: "✓" },
   { to: "/notes", label: "Notes", icon: "✎" },
-  { to: "/calendar", label: "Calendar", icon: "▦" },
+  { to: "/workouts", label: "Workouts & Food", icon: "💪" },
+  { to: "/habits", label: "Habits", icon: "🔥" },
 ];
 
 const MORE = [
+  { to: "/todos", label: "Todos", icon: "✓" },
+  { to: "/calendar", label: "Calendar", icon: "▦" },
   { to: "/cleaning", label: "Cleaning & Maintenance", icon: "🧹" },
   { to: "/shopping", label: "Shopping", icon: "🛒" },
   { to: "/bills", label: "Bills", icon: "🧾" },
   { to: "/investments", label: "Investments", icon: "📈" },
-  { to: "/workouts", label: "Workouts & Food", icon: "💪" },
-  { to: "/habits", label: "Habits", icon: "🔥" },
   { to: "/settings", label: "Settings", icon: "⚙" },
 ];
 
