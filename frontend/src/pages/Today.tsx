@@ -219,7 +219,7 @@ export default function Today() {
                     </div>
                     <div className="row" style={{ gap: 6 }}>
                       <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
-                      <button type="button" className="btn btn-sm" onClick={() => completeTask(task.id)}>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
                         Done
                       </button>
                     </div>
@@ -250,7 +250,7 @@ export default function Today() {
                       <Dumbbell size={16} className="icon-inline text-dim" aria-hidden="true" />
                       <span>Workout not logged</span>
                     </div>
-                    <Link to="/workouts?tab=workouts" className="btn btn-sm">
+                    <Link to="/workouts?tab=workouts" className="btn btn-primary btn-sm">
                       Log
                     </Link>
                   </div>
@@ -379,7 +379,7 @@ export default function Today() {
                     </div>
                     <div className="row" style={{ gap: 6 }}>
                       <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
-                      <button type="button" className="btn btn-sm" onClick={() => completeTask(task.id)}>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
                         Done
                       </button>
                     </div>
