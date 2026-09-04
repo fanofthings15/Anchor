@@ -31,6 +31,7 @@ export default function Habits() {
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [targetPerDay, setTargetPerDay] = useState<1 | 2>(1);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
   const dates = useMemo(buildWindowDates, []);
   const today = dates[dates.length - 1];
@@ -64,6 +65,7 @@ export default function Habits() {
   async function remove(id: string) {
     await api.deleteHabit(id);
     setHabits((prev) => prev.filter((h) => h.id !== id));
+    setConfirmingDeleteId(null);
   }
 
   async function logToday(habit: Habit) {
@@ -128,9 +130,35 @@ export default function Habits() {
                     <strong>{habit.name}</strong>
                     {current > 0 && <span className="habit-streak">🔥 {current}</span>}
                   </div>
-                  <button type="button" className="btn-icon text-danger" onClick={() => remove(habit.id)} aria-label="Delete habit">
-                    ✕
-                  </button>
+                  <div style={{ position: "relative" }}>
+                    <button
+                      type="button"
+                      className="btn-icon text-danger"
+                      onClick={() => setConfirmingDeleteId((v) => (v === habit.id ? null : habit.id))}
+                      aria-label="Delete habit"
+                    >
+                      ✕
+                    </button>
+                    {confirmingDeleteId === habit.id && (
+                      <>
+                        <div className="confirm-menu-backdrop" onClick={() => setConfirmingDeleteId(null)} />
+                        <div className="confirm-menu">
+                          <div className="confirm-menu-text">
+                            Delete "{habit.name}"?
+                            {current > 0 && ` This loses its ${current}-day streak.`}
+                          </div>
+                          <div className="row" style={{ gap: 8 }}>
+                            <button type="button" className="btn" onClick={() => setConfirmingDeleteId(null)}>
+                              Cancel
+                            </button>
+                            <button type="button" className="btn btn-danger" onClick={() => remove(habit.id)}>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="habit-graph">
                   {dates.map((date) => {
