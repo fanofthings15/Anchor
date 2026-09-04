@@ -111,16 +111,14 @@ function NoteGroup({
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <SortableContext items={notes.map((n) => n.id)} strategy={verticalListSortingStrategy}>
-        <div className="list">
-          {notes.map((note) => (
-            <SortableNoteCard
-              key={note.id}
-              note={note}
-              onOpen={() => onOpen(note.id)}
-              onTogglePin={() => onTogglePin(note)}
-            />
-          ))}
-        </div>
+        {notes.map((note) => (
+          <SortableNoteCard
+            key={note.id}
+            note={note}
+            onOpen={() => onOpen(note.id)}
+            onTogglePin={() => onTogglePin(note)}
+          />
+        ))}
       </SortableContext>
     </DndContext>
   );
@@ -207,7 +205,10 @@ export default function Notes() {
       ) : notes.length === 0 ? (
         <div className="empty-state">No notes yet — add one above.</div>
       ) : (
-        <>
+        // One shared flex list wraps both groups so the pinned/unpinned boundary gets the
+        // same gap as every other pair of cards — two separate `.list` containers back to
+        // back left that one boundary short a list gap versus adjacent cards elsewhere.
+        <div className="list">
           {pinnedNotes.length > 0 && (
             <NoteGroup
               notes={pinnedNotes}
@@ -222,7 +223,7 @@ export default function Notes() {
             onOpen={(id) => navigate(`/notes/${id}`)}
             onTogglePin={togglePin}
           />
-        </>
+        </div>
       )}
     </div>
   );
