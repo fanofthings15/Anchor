@@ -183,42 +183,33 @@ export default function Today() {
         <div className="empty-state">Nothing due — you're all caught up.</div>
       ) : (
         <>
-          {hasOverdue && (
+          {(dueSoonBills.length > 0 || dueSoonTasks.length > 0) && (
             <section>
-              <h2>Overdue</h2>
+              <h2>Upcoming</h2>
               <div className="list list-compact">
-                {overdueTodos.map((todo) => (
-                  <div className="card card-compact row-between" key={`todo-${todo.id}`}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
-                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
-                      <span className="ellipsis">{todo.title}</span>
-                    </div>
-                    <span className="chip chip-danger">{formatDate(todo.due_at!)}</span>
-                  </div>
-                ))}
-                {overdueBills.map((bill) => (
-                  <div className="card card-compact row-between" key={`bill-${bill.id}`}>
+                {dueSoonBills.map((bill) => (
+                  <div className="card card-compact row-between" key={bill.id}>
                     <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
                       <span className="ellipsis">{bill.name}</span>
                       <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-danger">{formatDate(bill.next_due_at)}</span>
+                      <span className="chip chip-warning">{formatDate(bill.next_due_at)}</span>
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
                         Paid
                       </button>
                     </div>
                   </div>
                 ))}
-                {overdueTasks.map((task) => (
-                  <div className="card card-compact row-between" key={`task-${task.id}`}>
+                {dueSoonTasks.map((task) => (
+                  <div className="card card-compact row-between" key={task.id}>
                     <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
                       <span className="ellipsis">{task.name}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
+                      <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
                         Done
                       </button>
@@ -352,33 +343,42 @@ export default function Today() {
             </section>
           )}
 
-          {(dueSoonBills.length > 0 || dueSoonTasks.length > 0) && (
+          {hasOverdue && (
             <section>
-              <h2>Due Soon</h2>
+              <h2>Overdue</h2>
               <div className="list list-compact">
-                {dueSoonBills.map((bill) => (
-                  <div className="card card-compact row-between" key={bill.id}>
+                {overdueTodos.map((todo) => (
+                  <div className="card card-compact row-between" key={`todo-${todo.id}`}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
+                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
+                      <span className="ellipsis">{todo.title}</span>
+                    </div>
+                    <span className="chip chip-danger">{formatDate(todo.due_at!)}</span>
+                  </div>
+                ))}
+                {overdueBills.map((bill) => (
+                  <div className="card card-compact row-between" key={`bill-${bill.id}`}>
                     <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
                       <span className="ellipsis">{bill.name}</span>
                       <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-warning">{formatDate(bill.next_due_at)}</span>
+                      <span className="chip chip-danger">{formatDate(bill.next_due_at)}</span>
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
                         Paid
                       </button>
                     </div>
                   </div>
                 ))}
-                {dueSoonTasks.map((task) => (
-                  <div className="card card-compact row-between" key={task.id}>
+                {overdueTasks.map((task) => (
+                  <div className="card card-compact row-between" key={`task-${task.id}`}>
                     <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
                       <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
                       <span className="ellipsis">{task.name}</span>
                     </div>
                     <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
+                      <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
                       <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
                         Done
                       </button>
