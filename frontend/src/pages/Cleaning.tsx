@@ -30,13 +30,15 @@ function toDateInput(iso: string): string {
   return iso.slice(0, 10);
 }
 
-// Compares UTC calendar days on both sides, matching the backend's own `date('now')`
-// (UTC) definition of overdue in cleaning.ts — a local-timezone comparison would make a
-// task appear due/overdue up to a day early or late depending on the viewer's offset.
+// `due` is built from next_due_at's own digits — a calendar date with no real timezone
+// meaning, just encoded as UTC midnight for storage. "today" has to be the viewer's
+// LOCAL calendar date, not UTC's: comparing against UTC's current date instead flips a
+// task to overdue hours early in any timezone behind UTC (most of the US), since UTC's
+// calendar day rolls over before the local one actually ends.
 function daysUntil(iso: string): number {
   const due = Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
   const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((due - today) / 86_400_000);
 }
 

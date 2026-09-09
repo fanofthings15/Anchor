@@ -19,14 +19,15 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
-// next_due_at is stored as UTC midnight of the intended calendar day, matching the
-// backend's own `date('now')` (UTC) definition of overdue in today.ts — comparing UTC
-// calendar days here (rather than raw instants, or a local-timezone conversion) keeps a
-// bill from flipping to "Overdue" hours early or late depending on the viewer's timezone.
+// `due` is built from next_due_at's own digits — a calendar date with no real timezone
+// meaning, just encoded as UTC midnight for storage. "today" has to be the viewer's
+// LOCAL calendar date, not UTC's: comparing against UTC's current date instead flips a
+// bill to overdue hours early in any timezone behind UTC (most of the US), since UTC's
+// calendar day rolls over before the local one actually ends.
 function daysUntil(iso: string): number {
   const due = Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
   const now = new Date();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
   return Math.round((due - today) / 86_400_000);
 }
 

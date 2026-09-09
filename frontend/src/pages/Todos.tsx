@@ -16,6 +16,7 @@ import {
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { api, type Todo, type TodoList } from "../api/client";
+import { todayISO } from "../calendarUtils";
 
 const COLLAPSE_STORAGE_KEY = "anchor-todos-collapsed-lists";
 
@@ -36,23 +37,30 @@ function saveCollapsed(ids: Set<string>) {
   }
 }
 
+// due_at is stored as a UTC-midnight timestamp of the intended calendar day (same
+// convention as bills/chores) — comparing raw instants against Date.now() flipped a todo
+// due "today" to overdue hours early in any timezone behind UTC, since UTC's calendar
+// day rolls over before the local one actually ends. Comparing the date substring against
+// the viewer's own local calendar date (todayISO()) avoids that.
 function isOverdue(dueAt: string): boolean {
-  return new Date(dueAt).getTime() < Date.now();
+  return dueAt.slice(0, 10) < todayISO();
 }
 
+// Reading getFullYear()/getMonth()/getDate() off a *parsed* UTC-midnight instant returns
+// its LOCAL calendar date, which is always one day behind in any timezone behind UTC
+// (that instant is 8pm the previous day in EDT, for example) — not just during evening
+// hours like isOverdue() above, but constantly, all day, every day, for any such viewer.
+// Comparing the raw date substring instead sidesteps the conversion entirely.
 function isDueToday(dueAt: string): boolean {
-  const due = new Date(dueAt);
-  const now = new Date();
-  return (
-    due.getFullYear() === now.getFullYear() &&
-    due.getMonth() === now.getMonth() &&
-    due.getDate() === now.getDate()
-  );
+  return dueAt.slice(0, 10) === todayISO();
 }
 
+// timeZone: "UTC" pins the display to the date's own digits — see isOverdue() above for
+// why due_at's date substring, not a local-converted read of the instant, is the
+// intended calendar day.
 function formatDue(dueAt: string): string {
   const due = new Date(dueAt);
-  return due.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return due.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 // Shared by every drag handle in this file — a dedicated element with its own

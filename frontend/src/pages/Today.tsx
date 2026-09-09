@@ -15,21 +15,24 @@ import {
 } from "../api/client";
 import { todayISO } from "../calendarUtils";
 
-// UTC-based — matches how todos/bills/recurring-task dates are stored (full ISO
-// timestamps via toISOString()) and how the backend's /api/today aggregation decides
-// what counts as due, so this has to stay on the same UTC basis as those, not the local
-// calendar-date basis workout_date/meal_date/habit_logs.log_date use (see todayISO() in
-// calendarUtils.ts, used further below for the food/workout/habit logged-today checks).
-function todayDateStr(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
+// Compares against the LOCAL calendar date, not UTC "now" — todos/bills/recurring-task
+// due dates are stored as UTC-midnight timestamps of the intended calendar day (e.g. a
+// chore due "Sept 8" is `2026-09-08T00:00:00Z`), but that's just an encoding choice: the
+// date portion IS the intended day, timezone-agnostic once you take just the substring.
+// Comparing it against UTC's current date instead of the viewer's actual local date made
+// anything due "today" flip to overdue hours early in any timezone behind UTC (most of
+// the US) — UTC's calendar day rolls over before the local one does. todayISO() (also
+// used below for the food/workout/habit logged-today checks) is local-date already.
 function isOverdue(dateIso: string): boolean {
-  return dateIso.slice(0, 10) < todayDateStr();
+  return dateIso.slice(0, 10) < todayISO();
 }
 
+// timeZone: "UTC" pins the display to the date's own digits — due dates are stored as
+// UTC-midnight timestamps of the intended calendar day (see isOverdue() below), so
+// without this a viewer behind UTC sees the day before the one actually set (matches
+// Bills.tsx/Cleaning.tsx's own formatDate, which already pin this).
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function formatTime(iso: string): string {
@@ -183,43 +186,6 @@ export default function Today() {
         <div className="empty-state">Nothing due — you're all caught up.</div>
       ) : (
         <>
-          {(dueSoonBills.length > 0 || dueSoonTasks.length > 0) && (
-            <section>
-              <h2>Upcoming</h2>
-              <div className="list list-compact">
-                {dueSoonBills.map((bill) => (
-                  <div className="card card-compact row-between" key={bill.id}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
-                      <span className="ellipsis">{bill.name}</span>
-                      <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
-                    </div>
-                    <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-warning">{formatDate(bill.next_due_at)}</span>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
-                        Paid
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {dueSoonTasks.map((task) => (
-                  <div className="card card-compact row-between" key={task.id}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
-                      <span className="ellipsis">{task.name}</span>
-                    </div>
-                    <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
           {hasMissedTracking && (
             <section>
               <h2>Missed Today</h2>
@@ -262,6 +228,89 @@ export default function Today() {
                     </div>
                   );
                 })}
+              </div>
+            </section>
+          )}
+
+          {(dueSoonBills.length > 0 || dueSoonTasks.length > 0) && (
+            <section>
+              <h2>Upcoming</h2>
+              <div className="list list-compact">
+                {dueSoonBills.map((bill) => (
+                  <div className="card card-compact row-between" key={bill.id}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{bill.name}</span>
+                      <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-warning">{formatDate(bill.next_due_at)}</span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {dueSoonTasks.map((task) => (
+                  <div className="card card-compact row-between" key={task.id}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{task.name}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-warning">{formatDate(task.next_due_at)}</span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {hasOverdue && (
+            <section>
+              <h2>Overdue</h2>
+              <div className="list list-compact">
+                {overdueTodos.map((todo) => (
+                  <div className="card card-compact row-between" key={`todo-${todo.id}`}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
+                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
+                      <span className="ellipsis">{todo.title}</span>
+                    </div>
+                    <span className="chip chip-danger">{formatDate(todo.due_at!)}</span>
+                  </div>
+                ))}
+                {overdueBills.map((bill) => (
+                  <div className="card card-compact row-between" key={`bill-${bill.id}`}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{bill.name}</span>
+                      <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-danger">{formatDate(bill.next_due_at)}</span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
+                        Paid
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {overdueTasks.map((task) => (
+                  <div className="card card-compact row-between" key={`task-${task.id}`}>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
+                      <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
+                      <span className="ellipsis">{task.name}</span>
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}
@@ -340,52 +389,6 @@ export default function Today() {
                   +{undatedTodos.length - UNDATED_TODO_LIMIT} more on your todo list
                 </Link>
               )}
-            </section>
-          )}
-
-          {hasOverdue && (
-            <section>
-              <h2>Overdue</h2>
-              <div className="list list-compact">
-                {overdueTodos.map((todo) => (
-                  <div className="card card-compact row-between" key={`todo-${todo.id}`}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 8 }}>
-                      <button type="button" className="checkbox-btn" onClick={() => completeTodo(todo.id)} aria-label="Mark complete" />
-                      <span className="ellipsis">{todo.title}</span>
-                    </div>
-                    <span className="chip chip-danger">{formatDate(todo.due_at!)}</span>
-                  </div>
-                ))}
-                {overdueBills.map((bill) => (
-                  <div className="card card-compact row-between" key={`bill-${bill.id}`}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <Banknote size={16} className="icon-inline text-dim" aria-hidden="true" />
-                      <span className="ellipsis">{bill.name}</span>
-                      <span style={{ flexShrink: 0 }}>· {formatCents(bill.amount_cents)}</span>
-                    </div>
-                    <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-danger">{formatDate(bill.next_due_at)}</span>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => markBillPaid(bill.id)}>
-                        Paid
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {overdueTasks.map((task) => (
-                  <div className="card card-compact row-between" key={`task-${task.id}`}>
-                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 6 }}>
-                      <Broom size={16} className="icon-inline text-dim" aria-hidden="true" />
-                      <span className="ellipsis">{task.name}</span>
-                    </div>
-                    <div className="row" style={{ gap: 6 }}>
-                      <span className="chip chip-danger">{formatDate(task.next_due_at)}</span>
-                      <button type="button" className="btn btn-primary btn-sm" onClick={() => completeTask(task.id)}>
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </section>
           )}
         </>
