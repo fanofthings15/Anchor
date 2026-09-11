@@ -81,13 +81,24 @@ export default function Today() {
   async function load() {
     setLoading(true);
     try {
-      const [data, allTodos, mealDates, workoutData, shopping, habitData] = await Promise.all([
+      // Local day boundaries, not the backend's `eventsToday` (which matches events by
+      // UTC calendar date — the same early/late flip class of bug fixed elsewhere on this
+      // page, and it never included Google events at all). Fetching both sources for
+      // [local midnight, local midnight tomorrow) client-side and merging matches exactly
+      // how the Calendar page itself sources events.
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).toISOString();
+
+      const [data, allTodos, mealDates, workoutData, shopping, habitData, ownEvents, googleEvents] = await Promise.all([
         api.getToday(),
         api.getTodos(),
         api.listMealDates(),
         api.getWorkouts(),
         api.getShopping(),
         api.getHabits(),
+        api.listCalendarEvents(startOfToday, startOfTomorrow),
+        api.listGoogleCalendarEvents(startOfToday, startOfTomorrow),
       ]);
       setTodosDue(data.todosDue);
       setUndatedTodos(allTodos.todos.filter((t) => !t.completed && !t.due_at));
@@ -95,7 +106,7 @@ export default function Today() {
       setShoppingLists(shopping.lists);
       setBillsDue(data.billsDue);
       setTasksDue(data.tasksDue);
-      setEventsToday(data.eventsToday);
+      setEventsToday([...ownEvents, ...googleEvents].sort((a, b) => a.start_at.localeCompare(b.start_at)));
       setWeekRecap(data.weekRecap);
       setLoggedFoodToday(mealDates.includes(today));
       setLoggedWorkoutToday(workoutData.workouts.some((w) => w.workout_date === today));

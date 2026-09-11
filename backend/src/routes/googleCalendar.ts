@@ -57,11 +57,24 @@ function getSelectedCalendarIds(row: ConnectionRow): string[] {
   }
 }
 
-googleCalendarRouter.get("/status", (req, res) => {
+// `connected` reflects whether the stored token actually still works, not just whether a
+// connection row exists — Google can silently revoke/expire a refresh token from its own
+// side (most commonly: an OAuth consent screen still in "Testing" publishing status caps
+// refresh tokens at 7 days, no matter how often they're used) with nothing on this app's
+// end changing. Without validating here, the row alone would keep reporting "Connected"
+// forever while every event fetch quietly returns empty. `needsReconnect` distinguishes
+// "was connected, token died" from "never connected", so the frontend can prompt
+// specifically to reconnect instead of just showing the plain first-time Connect button.
+googleCalendarRouter.get("/status", async (req, res) => {
   const row = db
     .query<ConnectionRow, [string]>("SELECT * FROM google_calendar_connections WHERE user_id = ?")
     .get(req.uid);
-  res.json({ connected: !!row, configured: !!CLIENT_ID });
+  if (!row) {
+    res.json({ connected: false, needsReconnect: false, configured: !!CLIENT_ID });
+    return;
+  }
+  const accessToken = await getValidAccessToken(req.uid);
+  res.json({ connected: !!accessToken, needsReconnect: !accessToken, configured: !!CLIENT_ID });
 });
 
 interface GoogleCalendarListEntry {

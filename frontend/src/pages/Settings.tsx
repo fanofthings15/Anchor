@@ -19,6 +19,7 @@ export default function Settings() {
   const [pinSaving, setPinSaving] = useState(false);
 
   const [googleConnected, setGoogleConnected] = useState(false);
+  const [googleNeedsReconnect, setGoogleNeedsReconnect] = useState(false);
   const [googleConfigured, setGoogleConfigured] = useState(true);
   const [googleBusy, setGoogleBusy] = useState(false);
   const [googleResult, setGoogleResult] = useState<"connected" | "error" | null>(null);
@@ -69,6 +70,7 @@ export default function Settings() {
   async function loadGoogleStatus() {
     const s = await api.getGoogleCalendarStatus();
     setGoogleConnected(s.connected);
+    setGoogleNeedsReconnect(s.needsReconnect);
     setGoogleConfigured(s.configured);
     if (s.connected) loadGoogleCalendars();
   }
@@ -100,6 +102,7 @@ export default function Settings() {
     try {
       await api.disconnectGoogleCalendar();
       setGoogleConnected(false);
+      setGoogleNeedsReconnect(false);
       setGoogleCalendars([]);
       setGoogleResult(null);
     } finally {
@@ -374,6 +377,19 @@ export default function Settings() {
         )}
         {!googleConfigured ? (
           <div className="text-dim" style={{ fontSize: 13 }}>Google Calendar isn't configured on this server yet.</div>
+        ) : googleNeedsReconnect ? (
+          <>
+            <div className="text-danger" style={{ fontSize: 13, marginBottom: 12 }}>
+              Google Calendar disconnected — Google stopped honoring the connection (commonly because the app's
+              OAuth consent screen is still in "Testing" mode there, which caps access at 7 days). Reconnect below
+              to keep events syncing.
+            </div>
+            <div className="form-actions">
+              <a className="btn btn-primary" href="/api/calendar/google/connect">
+                Reconnect Google Calendar
+              </a>
+            </div>
+          </>
         ) : googleConnected ? (
           <>
             <div className="form-actions" style={{ marginBottom: 12 }}>

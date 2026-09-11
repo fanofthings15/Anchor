@@ -446,7 +446,8 @@ export const api = {
   // Google Calendar — read-only import, never writes back to Google. "Connect" is a real
   // page navigation (through Google's own consent screen), not a fetch, so it isn't
   // exposed here as a request()-based call.
-  getGoogleCalendarStatus: () => request<{ connected: boolean; configured: boolean }>("/calendar/google/status"),
+  getGoogleCalendarStatus: () =>
+    request<{ connected: boolean; needsReconnect: boolean; configured: boolean }>("/calendar/google/status"),
   listGoogleCalendarEvents: (from: string, to: string) =>
     request<CalendarEvent[]>(`/calendar/google/events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   disconnectGoogleCalendar: () => request<{ connected: false }>("/calendar/google/disconnect", { method: "DELETE" }),
