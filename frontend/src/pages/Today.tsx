@@ -209,10 +209,15 @@ export default function Today() {
                     onClick={() => navigate("/calendar")}
                     key={event.id}
                   >
-                    <span className="ellipsis">
-                      {event.title}
-                      {event.location && <span className="text-dim"> · {event.location}</span>}
-                    </span>
+                    <div className="row" style={{ flex: 1, minWidth: 0, gap: 0 }}>
+                      {event.source === "google" && (
+                        <span className="calendar-event-dot" style={{ background: event.color ?? "var(--accent)" }} />
+                      )}
+                      <span className="ellipsis">
+                        {event.title}
+                        {event.location && <span className="text-dim"> · {event.location}</span>}
+                      </span>
+                    </div>
                     <span className="chip">{event.all_day ? "All day" : formatTime(event.start_at)}</span>
                   </div>
                 ))}
