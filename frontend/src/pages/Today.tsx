@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Banknote, Broom, Dumbbell, Flame, Utensils } from "lucide-react";
 import {
   api,
@@ -54,6 +54,7 @@ function habitLogKey(habitId: string, date: string): string {
 const UNDATED_TODO_LIMIT = 3;
 
 export default function Today() {
+  const navigate = useNavigate();
   const [todosDue, setTodosDue] = useState<Todo[]>([]);
   const [undatedTodos, setUndatedTodos] = useState<Todo[]>([]);
   const [billsDue, setBillsDue] = useState<Bill[]>([]);
@@ -186,6 +187,28 @@ export default function Today() {
         <div className="empty-state">Nothing due — you're all caught up.</div>
       ) : (
         <>
+          {eventsToday.length > 0 && (
+            <section>
+              <h2>Calendar</h2>
+              <div className="list list-compact">
+                {eventsToday.map((event) => (
+                  <div
+                    className="card card-compact row-between"
+                    style={{ cursor: "pointer" }}
+                    onClick={() => navigate("/calendar")}
+                    key={event.id}
+                  >
+                    <span className="ellipsis">
+                      {event.title}
+                      {event.location && <span className="text-dim"> · {event.location}</span>}
+                    </span>
+                    <span className="chip">{event.all_day ? "All day" : formatTime(event.start_at)}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {hasMissedTracking && (
             <section>
               <h2>Missed Today</h2>
@@ -309,23 +332,6 @@ export default function Today() {
                         Done
                       </button>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {eventsToday.length > 0 && (
-            <section>
-              <h2>Calendar</h2>
-              <div className="list list-compact">
-                {eventsToday.map((event) => (
-                  <div className="card card-compact row-between" key={event.id}>
-                    <span className="ellipsis">
-                      {event.title}
-                      {event.location && <span className="text-dim"> · {event.location}</span>}
-                    </span>
-                    <span className="chip">{event.all_day ? "All day" : formatTime(event.start_at)}</span>
                   </div>
                 ))}
               </div>
