@@ -21,6 +21,7 @@ import { todayRouter } from "./routes/today";
 import { backupRouter } from "./routes/backup";
 import { googleCalendarRouter } from "./routes/googleCalendar";
 import { startScheduledBackups } from "./scheduledBackup";
+import { startDiscordReminders } from "./discordReminders";
 
 const app = express();
 // Raised from Express's 100kb default so pasted note images (sent as base64 JSON, ~33%
@@ -92,3 +93,4 @@ app.listen(PORT, () => {
 });
 
 startScheduledBackups();
+startDiscordReminders();
